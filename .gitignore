@@ -1,0 +1,34 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Machine-local environments and temporary files.
+.apptainer-tmp/
+.runtime*/
+.all-git/
+.aris/
+EXPERIMENT_AUDIT.md
+EXPERIMENT_AUDIT.json
+
+# Large assets and experiment outputs are synchronized separately.
+/data
+/models
+/runs
+/sources
+/artifacts
+/vendor
+/containers/wheels
+Memix-core-share-*.tar.gz
+
+# Provider credentials and local endpoint configuration.
+.env
+.env.*
+*.key
+
+# Official snapshots and generated bundles are intentionally local artifacts.
+/data/raw/
+/data/unified/

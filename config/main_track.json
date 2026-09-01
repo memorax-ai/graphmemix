@@ -1,0 +1,14 @@
+{
+  "atm_bench": {
+    "bundle": "data/unified/atm_bench"
+  },
+  "mem_gallery": {
+    "bundle": "data/unified/mem_gallery"
+  },
+  "memeye": {
+    "bundle": "data/unified/memeye"
+  },
+  "h2hmem": {
+    "bundle": "data/unified/h2hmem"
+  }
+}

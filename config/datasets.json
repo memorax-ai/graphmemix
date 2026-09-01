@@ -1,0 +1,48 @@
+{
+  "atm_bench": {
+    "display_name": "ATM-Bench + ATM-Bench-Hard",
+    "multimodal": true,
+    "modalities": ["text", "image", "video"],
+    "data_repo": "https://huggingface.co/datasets/Jingbiao/ATM-Bench",
+    "revision": "78e826dc07e97466b2f54443831ef9a83ab8b27c",
+    "local_dir": "atm_bench",
+    "declared_data_license": "CC-BY-NC-4.0",
+    "download_size_note": "about 3.3 GB",
+    "semantic_questions": 1044
+  },
+  "mem_gallery": {
+    "display_name": "Mem-Gallery",
+    "multimodal": true,
+    "modalities": ["text", "image"],
+    "data_repo": "https://huggingface.co/datasets/Ethan-Bei/Mem-Gallery",
+    "revision": "af912daba984e896e253016b7c7e334ef92c2a6f",
+    "local_dir": "mem_gallery",
+    "declared_data_license": "MIT",
+    "download_size_note": "about 546 MB",
+    "semantic_questions": 1711
+  },
+  "memeye": {
+    "display_name": "MemEye",
+    "multimodal": true,
+    "modalities": ["text", "image"],
+    "data_repo": "https://huggingface.co/datasets/MemEyeBench/MemEye",
+    "revision": "f139f89d08bf0f66986153b5ff010cac24ba383d",
+    "local_dir": "memeye",
+    "declared_data_license": "Apache-2.0 (code/documentation; image provenance review required)",
+    "download_size_note": "about 268 MB",
+    "semantic_questions": 371
+  },
+  "h2hmem": {
+    "display_name": "H2HMem",
+    "multimodal": true,
+    "modalities": ["text", "image"],
+    "data_repo": "https://huggingface.co/datasets/varib/H2HMEM",
+    "revision": "555a613df9dc462b42e4edd53ff97e799572da99",
+    "local_dir": "h2hmem",
+    "declared_data_license": "MIT",
+    "download_size_note": "about 964 MB",
+    "semantic_questions": 2236,
+    "primary_track": true,
+    "track": "main"
+  }
+}

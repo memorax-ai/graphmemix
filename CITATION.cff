@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "If you use GraphMemix, please cite the accompanying paper."
+title: "GraphMemix"
+type: software
+authors:
+  - family-names: Li
+    given-names: Geng
+  - family-names: Wang
+    given-names: Yuhao
+  - family-names: Li
+    given-names: Dong
+  - family-names: Hao
+    given-names: Jianye
+  - family-names: Peng
+    given-names: Yuxin
+date-released: 2026-08-27
+repository-code: "https://github.com/ligeng0197/graphmemix"
+url: "https://arxiv.org/abs/2608.26983"
+preferred-citation:
+  type: article
+  title: "GraphMemix: Query-Aware Evidence Forests for Long-Term Multimodal Agent Memory"
+  authors:
+    - family-names: Li
+      given-names: Geng
+    - family-names: Wang
+      given-names: Yuhao
+    - family-names: Li
+      given-names: Dong
+    - family-names: Hao
+      given-names: Jianye
+    - family-names: Peng
+      given-names: Yuxin
+  journal: "arXiv"
+  year: 2026
+  identifiers:
+    - type: url
+      value: "https://arxiv.org/abs/2608.26983"
+      description: "arXiv:2608.26983"

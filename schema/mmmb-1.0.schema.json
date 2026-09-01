@@ -1,0 +1,391 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mm-memory-bench.local/schema/mmmb-1.0.schema.json",
+  "title": "MMMB 1.0 canonical records",
+  "description": "Public contract for an mmmb-1.0 manifest or JSONL table record. Benchmark-specific fields and metadata remain extensible.",
+  "oneOf": [
+    {"$ref": "#/$defs/manifest"},
+    {"$ref": "#/$defs/context"},
+    {"$ref": "#/$defs/memory"},
+    {"$ref": "#/$defs/asset"},
+    {"$ref": "#/$defs/question"}
+  ],
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Benchmark-specific, loss-preserving metadata.",
+      "additionalProperties": true
+    },
+    "annotations": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source_file"],
+      "properties": {
+        "source_file": {"$ref": "#/$defs/nonEmptyString"},
+        "json_pointer": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "textContent": {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {
+        "type": {"const": "text"},
+        "text": {"type": "string"},
+        "annotations": {"$ref": "#/$defs/annotations"}
+      },
+      "additionalProperties": true
+    },
+    "assetContent": {
+      "type": "object",
+      "required": ["type", "asset_id"],
+      "properties": {
+        "type": {
+          "enum": ["image", "video", "audio", "document", "table"]
+        },
+        "asset_id": {"$ref": "#/$defs/nonEmptyString"},
+        "annotations": {"$ref": "#/$defs/annotations"}
+      },
+      "additionalProperties": true
+    },
+    "content": {
+      "description": "One ordered model-input content block.",
+      "oneOf": [
+        {"$ref": "#/$defs/textContent"},
+        {"$ref": "#/$defs/assetContent"}
+      ]
+    },
+    "contentList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/content"}
+    },
+    "evidence": {
+      "type": "object",
+      "description": "A canonical evidence reference; native_id supports unresolved source evidence.",
+      "properties": {
+        "memory_id": {"$ref": "#/$defs/nonEmptyString"},
+        "asset_id": {"$ref": "#/$defs/nonEmptyString"},
+        "native_id": {"$ref": "#/$defs/nonEmptyString"},
+        "session_id": {"$ref": "#/$defs/nonEmptyString"},
+        "relation": {"type": "string"},
+        "source_type": {"type": "string"},
+        "metadata": {"$ref": "#/$defs/metadata"}
+      },
+      "anyOf": [
+        {"required": ["memory_id"]},
+        {"required": ["asset_id"]},
+        {"required": ["native_id"]},
+        {"required": ["session_id"]}
+      ],
+      "additionalProperties": true
+    },
+    "allMemoryScope": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {"const": "all"}
+      },
+      "additionalProperties": true
+    },
+    "prefixMemoryScope": {
+      "type": "object",
+      "required": ["mode", "max_sequence"],
+      "properties": {
+        "mode": {"const": "prefix"},
+        "max_sequence": {"type": "integer"}
+      },
+      "additionalProperties": true
+    },
+    "idsMemoryScope": {
+      "type": "object",
+      "required": ["mode", "memory_ids"],
+      "properties": {
+        "mode": {"const": "ids"},
+        "memory_ids": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/nonEmptyString"},
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "memory_scope": {
+      "description": "The memories visible to a question.",
+      "oneOf": [
+        {"$ref": "#/$defs/allMemoryScope"},
+        {"$ref": "#/$defs/prefixMemoryScope"},
+        {"$ref": "#/$defs/idsMemoryScope"}
+      ]
+    },
+    "answer": {
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text": {"type": "string"},
+        "choice_ids": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "unanswerable": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "choice": {
+      "type": "object",
+      "required": ["choice_id", "text"],
+      "properties": {
+        "choice_id": {"$ref": "#/$defs/nonEmptyString"},
+        "text": {"type": "string"},
+        "content": {"$ref": "#/$defs/contentList"}
+      },
+      "additionalProperties": true
+    },
+    "task": {
+      "type": "object",
+      "properties": {
+        "category": {"type": "string"},
+        "subcategory": {"type": "string"},
+        "response_type": {"enum": ["text", "choice", "structured_json"]}
+      },
+      "additionalProperties": true
+    },
+    "toolValue": {
+      "description": "A recursively JSON-compatible, model-visible tool schema value.",
+      "oneOf": [
+        {"type": ["string", "number", "boolean", "null"]},
+        {
+          "type": "array",
+          "items": {"$ref": "#/$defs/toolValue"}
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "not": {
+              "enum": [
+                "answer",
+                "answers",
+                "correct_answer",
+                "evaluation_private",
+                "evaluation_variants",
+                "evidence",
+                "gold",
+                "gold_answer",
+                "ground_truth",
+                "metadata",
+                "provenance",
+                "reference_answer",
+                "solution"
+              ]
+            }
+          },
+          "additionalProperties": {"$ref": "#/$defs/toolValue"}
+        }
+      ]
+    },
+    "tool": {
+      "type": "object",
+      "description": "One public candidate tool in OpenAI, Anthropic, or another JSON-compatible schema.",
+      "propertyNames": {
+        "not": {
+          "enum": [
+            "answer",
+            "answers",
+            "correct_answer",
+            "evaluation_private",
+            "evaluation_variants",
+            "evidence",
+            "gold",
+            "gold_answer",
+            "ground_truth",
+            "metadata",
+            "provenance",
+            "reference_answer",
+            "solution"
+          ]
+        }
+      },
+      "additionalProperties": {"$ref": "#/$defs/toolValue"}
+    },
+    "tableMap": {
+      "type": "object",
+      "required": ["contexts", "memories", "assets", "questions"],
+      "properties": {
+        "contexts": {"$ref": "#/$defs/nonEmptyString"},
+        "memories": {"$ref": "#/$defs/nonEmptyString"},
+        "assets": {"$ref": "#/$defs/nonEmptyString"},
+        "questions": {"$ref": "#/$defs/nonEmptyString"}
+      },
+      "additionalProperties": true
+    },
+    "countMap": {
+      "type": "object",
+      "required": ["contexts", "memories", "assets", "questions"],
+      "properties": {
+        "contexts": {"type": "integer", "minimum": 0},
+        "memories": {"type": "integer", "minimum": 0},
+        "assets": {"type": "integer", "minimum": 0},
+        "questions": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "manifest": {
+      "title": "manifest.json",
+      "type": "object",
+      "required": ["schema_version", "benchmark", "generated_at", "tables", "counts"],
+      "properties": {
+        "schema_version": {"const": "mmmb-1.0"},
+        "benchmark": {"$ref": "#/$defs/nonEmptyString"},
+        "dataset_id": {"type": "string"},
+        "description": {"type": "string"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "tables": {"$ref": "#/$defs/tableMap"},
+        "counts": {"$ref": "#/$defs/countMap"},
+        "subsets": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "modalities": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "source": {
+          "oneOf": [
+            {"type": "string"},
+            {"type": "object", "additionalProperties": true}
+          ]
+        },
+        "license": {
+          "oneOf": [
+            {"type": "string"},
+            {"type": "object", "additionalProperties": true}
+          ]
+        },
+        "raw_snapshot": {"$ref": "#/$defs/metadata"},
+        "evaluation": {"$ref": "#/$defs/metadata"},
+        "metadata": {"$ref": "#/$defs/metadata"}
+      },
+      "additionalProperties": true
+    },
+    "context": {
+      "title": "contexts.jsonl record",
+      "type": "object",
+      "required": ["context_id", "benchmark"],
+      "properties": {
+        "context_id": {"$ref": "#/$defs/nonEmptyString"},
+        "benchmark": {"$ref": "#/$defs/nonEmptyString"},
+        "title": {"type": "string"},
+        "persona": {},
+        "profile": {},
+        "persona_id": {"type": "string"},
+        "user_id": {"type": "string"},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "metadata": {"$ref": "#/$defs/metadata"}
+      },
+      "additionalProperties": true
+    },
+    "memory": {
+      "title": "memories.jsonl record",
+      "type": "object",
+      "required": ["memory_id", "context_id", "sequence", "kind", "content"],
+      "properties": {
+        "memory_id": {"$ref": "#/$defs/nonEmptyString"},
+        "context_id": {"$ref": "#/$defs/nonEmptyString"},
+        "session_id": {"type": "string"},
+        "source_id": {"type": "string"},
+        "sequence": {"type": "integer", "minimum": 0},
+        "timestamp": {"type": ["string", "null"]},
+        "kind": {
+          "enum": [
+            "dialogue_message",
+            "email",
+            "media",
+            "profile",
+            "document",
+            "table",
+            "artifact",
+            "state"
+          ]
+        },
+        "role": {"type": "string"},
+        "speaker": {"type": "string"},
+        "content": {"$ref": "#/$defs/contentList"},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "metadata": {"$ref": "#/$defs/metadata"}
+      },
+      "additionalProperties": true
+    },
+    "asset": {
+      "title": "assets.jsonl record",
+      "type": "object",
+      "required": ["asset_id", "media_type", "path"],
+      "properties": {
+        "asset_id": {"$ref": "#/$defs/nonEmptyString"},
+        "media_type": {
+          "enum": ["image", "video", "audio", "document", "table"]
+        },
+        "path": {"$ref": "#/$defs/nonEmptyString"},
+        "mime_type": {"type": ["string", "null"]},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": "string"},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "metadata": {"$ref": "#/$defs/metadata"}
+      },
+      "additionalProperties": true
+    },
+    "question": {
+      "title": "questions.jsonl record",
+      "type": "object",
+      "required": [
+        "question_id",
+        "context_id",
+        "prompt",
+        "answer",
+        "memory_scope"
+      ],
+      "properties": {
+        "question_id": {"$ref": "#/$defs/nonEmptyString"},
+        "semantic_question_id": {"type": "string"},
+        "context_id": {"$ref": "#/$defs/nonEmptyString"},
+        "subset": {"type": "string"},
+        "split": {"type": "string"},
+        "prompt": {"$ref": "#/$defs/contentList"},
+        "instruction": {"type": "string"},
+        "tools": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/tool"}
+        },
+        "task": {"$ref": "#/$defs/task"},
+        "choices": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/choice"}
+        },
+        "answer": {"$ref": "#/$defs/answer"},
+        "evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidence"}
+        },
+        "misleading_evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidence"}
+        },
+        "memory_scope": {"$ref": "#/$defs/memory_scope"},
+        "query_at": {"type": "object", "additionalProperties": true},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "metadata": {"$ref": "#/$defs/metadata"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

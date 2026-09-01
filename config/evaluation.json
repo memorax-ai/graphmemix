@@ -1,0 +1,14 @@
+{
+  "formal_evaluator": "llm_judge",
+  "protocol": "mmmb-llm-judge-1.0",
+  "judge_model": null,
+  "judge_model_policy": "required at run time and must be reported with an exact provider/model version",
+  "temperature": 0,
+  "per_item_output": "correct, binary score, brief explanation",
+  "primary_aggregates": [
+    "accuracy_conservative",
+    "semantic_question_macro_accuracy"
+  ],
+  "failure_policy": "record error; count as zero in conservative accuracy; retry failed rows on resume",
+  "native_scorers": "preserved in each bundle manifest for later benchmark-specific evaluation"
+}

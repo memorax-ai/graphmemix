@@ -1,0 +1,50 @@
+{
+  "protocol": "graphmemix-shared-logistic-devfold-1.0",
+  "features": [
+    "atomic_score",
+    "verifier_score"
+  ],
+  "coefficients": {
+    "a": 4.054056101800787,
+    "b": 0.22537987366704051,
+    "c": -3.711336391577528
+  },
+  "standardization": {
+    "mean": [
+      0.385391984864531,
+      0.6363469200482629
+    ],
+    "scale": [
+      0.11397268466925617,
+      1.6249151233441483
+    ]
+  },
+  "l2": 0.001,
+  "candidates": 62988,
+  "positives": 8491,
+  "prevalence": 0.13480345462627802,
+  "mean_probability": 0.1348038811884529,
+  "datasets": {
+    "atm": {
+      "candidates": 9657,
+      "gold_candidates": 266
+    },
+    "mem_gallery": {
+      "candidates": 15643,
+      "gold_candidates": 1514
+    },
+    "memeye": {
+      "candidates": 17672,
+      "gold_candidates": 1767
+    },
+    "h2hmem": {
+      "candidates": 20016,
+      "gold_candidates": 4944
+    }
+  },
+  "optimizer": {
+    "success": true,
+    "iterations": 6
+  },
+  "warning": "Gold evidence is used only on SHA256 fold 0 development questions."
+}

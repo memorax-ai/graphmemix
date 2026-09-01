@@ -1,0 +1,9 @@
+{
+  "protocol": "graphmemix-repository-audit-v1",
+  "allowlist": "release/repository_allowlist.txt",
+  "files": 93,
+  "bytes": 2593764,
+  "missing": [],
+  "issues": [],
+  "status": "valid"
+}

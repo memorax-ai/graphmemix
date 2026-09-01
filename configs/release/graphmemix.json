@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "method": "GraphMemix",
+  "benchmark_suite": {
+    "datasets": {
+      "atm": {"bundle": "atm_bench", "expected_questions": 1044},
+      "mem_gallery": {"bundle": "mem_gallery", "expected_questions": 1711},
+      "memeye": {"bundle": "memeye", "expected_questions": 1855},
+      "h2hmem": {"bundle": "h2hmem", "expected_questions": 1982}
+    },
+    "backbones": {
+      "qwen3vl8b": {
+        "model": "Qwen/Qwen3-VL-8B-Instruct",
+        "reasoning_effort": "none"
+      },
+      "gemma4_12b": {
+        "model": "google/gemma-4-12B-it",
+        "reasoning_effort": "none"
+      }
+    },
+    "calibration_file": "configs/release/calibration/shared_dev.json",
+    "node_utility_summary": {
+      "alpha": 0.8,
+      "tau": 5.2,
+      "delta": 0.7,
+      "note": "Human-readable approximation; calibration_file contains the machine-exact frozen coefficients used by the pipeline."
+    },
+    "embedding_model": "Alibaba-NLP/gme-Qwen2-VL-2B-Instruct",
+    "source_top_k": 200,
+    "source_top_l": 24,
+    "candidate_limit": 48,
+    "semantic_k": 8,
+    "anchor_count": 10,
+    "reader_k": 10,
+    "edge_weight": 0.1,
+    "proposal_root_cost": 0.2,
+    "pruning_root_cost": 0.12,
+    "edge_power": 1.0,
+    "max_model_len": 32768,
+    "verifier_max_output_tokens": 8192,
+    "reader_max_output_tokens": 1000,
+    "snippet_chars": 420,
+    "verifier_ocr_chars": 120,
+    "reader_ocr_chars": 320,
+    "overflow_image_max_edge": 2500,
+    "judge": {
+      "model": "gpt-5-mini",
+      "protocol": "mmmb-llm-judge-1.2",
+      "excluded_from_method_cost": true
+    }
+  },
+  "artifact_layout": {
+    "checkpoint": "checkpoints/{dataset}",
+    "source_priors": "source_priors/{dataset}.jsonl",
+    "relation_store": "relation_store/{dataset}.jsonl",
+    "caption_sidecar": "captions/{dataset}.jsonl",
+    "memix_repo": "vendor/memix-core"
+  }
+}

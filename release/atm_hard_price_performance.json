@@ -1,0 +1,54 @@
+{
+  "protocol": "atm-hard-price-performance-v1",
+  "official_snapshot": {
+    "source": "https://atmbench.github.io/static/js/price_perf.js",
+    "retrieved_at": "2026-08-11",
+    "series": [
+      {"label": "GPT-5.6 Sol", "color": "#4f8df7", "points": [[9.53, 41.68], [12.52, 58.76], [14.79, 51.54]]},
+      {"label": "Claude Opus 5", "color": "#8b5cf6", "points": [[5.84, 51.37], [7.29, 53.36], [12.33, 58.37]]},
+      {"label": "Claude Fable 5", "color": "#ec4899", "points": [[7.93, 46.77], [10.13, 51.69], [11.95, 52.55], [15.06, 56.42]]},
+      {"label": "Kimi K3-256k", "color": "#2bbbad", "points": [[3.68, 48.48], [5.54, 52.53]]},
+      {"label": "GPT-5.6 Terra", "color": "#f5a623", "points": [[4.32, 28.22], [5.01, 38.61], [5.96, 40.95], [9.92, 44.47]]},
+      {"label": "GPT-5.6 Luna", "color": "#728197", "points": [[0.45, 31.57], [0.53, 34.92], [0.78, 41.70], [1.01, 42.39]]},
+      {"label": "Gemini 3.6 Flash", "color": "#6b9dfc", "points": [[13.59, 42.77], [19.96, 48.15]]}
+    ],
+    "single_points": [
+      {"label": "Kimi K2.7", "cost_usd": 3.53, "qs_percent": 49.10},
+      {"label": "GPT-5.5 (xhigh)", "cost_usd": 39.74, "qs_percent": 48.08},
+      {"label": "Claude Opus 4.8", "cost_usd": 7.49, "qs_percent": 41.63},
+      {"label": "DeepSeek V4 Flash 0731", "cost_usd": 0.26, "qs_percent": 38.28},
+      {"label": "GLM-5.2", "cost_usd": 3.29, "qs_percent": 47.69}
+    ]
+  },
+  "graphmemix_forest_v3": {
+    "score_source": "release/benchmark_results.json",
+    "score_key": "extensions.atm_hard_graphmemix_forest_v3.primary_run.qs_percent",
+    "development_set_extension": true,
+    "questions": 31,
+    "pricing_snapshot": {
+      "database": "Tokdash pricing_db.json 2.0.11",
+      "date": "2026-07-31",
+      "commit": "41b14f991c43c6bd376f112655af0f26ff86444d",
+      "unit": "USD per million tokens",
+      "deepseek_v4_flash": {"input": 0.14, "cache_read": 0.014, "output": 0.28},
+      "gpt_5_6_sol": {"input": 5.0, "cache_read": 0.5, "output": 30.0}
+    },
+    "graph_builder": {
+      "uncached_input_tokens": 1934440,
+      "cache_read_input_tokens": 38786944,
+      "output_tokens": 1256818,
+      "cost_usd": 1.165747856,
+      "note": "Frozen DeepSeek evidence graphs reused by the released v3 selector."
+    },
+    "reader": {
+      "input_tokens": 743204,
+      "cache_read_input_tokens": 316672,
+      "output_tokens": 5160,
+      "cost_usd": 2.445796
+    },
+    "method_inference": {
+      "api_list_price_equivalent_usd": 3.611543856,
+      "excluded": ["gpt-5-mini evaluation", "local embedding and graph optimization compute"]
+    }
+  }
+}

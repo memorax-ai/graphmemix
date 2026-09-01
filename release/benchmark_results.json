@@ -1,0 +1,61 @@
+{
+  "protocol": "graphmemix-benchmark-results-v1",
+  "judge": "gpt-5-mini",
+  "datasets": ["atm", "mem_gallery", "memeye", "h2hmem"],
+  "benchmark_suite": {
+    "qwen3vl8b": {
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "judge_accuracy_percent": {
+        "atm": 55.27,
+        "mem_gallery": 76.33,
+        "memeye": 53.64,
+        "h2hmem": 60.96,
+        "macro_average": 61.55
+      },
+      "native_metric_percent": {
+        "atm_em": 53.83,
+        "mem_gallery_em": 36.76,
+        "memeye_mcq_em": 54.25,
+        "h2hmem_lexical_recall": 54.70
+      }
+    },
+    "gemma4_12b": {
+      "model": "google/gemma-4-12B-it",
+      "judge_accuracy_percent": {
+        "atm": 58.05,
+        "mem_gallery": 81.47,
+        "memeye": 66.68,
+        "h2hmem": 63.47,
+        "macro_average": 67.42
+      },
+      "native_metric_percent": {
+        "atm_em": 57.47,
+        "mem_gallery_em": 35.65,
+        "memeye_mcq_em": 43.06,
+        "h2hmem_lexical_recall": 49.91
+      }
+    }
+  },
+  "extensions": {
+    "atm_hard_graphmemix_forest_v3": {
+      "status": "development-set extension; not part of the held-out benchmark suite",
+      "questions": 31,
+      "selector_protocol": "atm-hard-graphmemix-forest-v3",
+      "primary_run": {
+        "qs_percent": 57.94831617886647,
+        "list_recall_percent": 74.69981679540504,
+        "number_percent": 66.66666666666666,
+        "open_end_percent": 38.46153846153846,
+        "judge": "gpt-5-mini with hash-bound ATM-Bench official open-ended prompt",
+        "artifact_sha256": {
+          "retrieval": "0bbc4f6e4464fe310571a26c9bbc5edd5032c4ce8aba6f0f2806cf05b148e730",
+          "predictions": "e686856444f64c0da32b69a219b505e72c688fac7de1fe6a136af8edb52dbfb0",
+          "judgments": "c22ea3bc11989c71003ed4c2c90a264409f0f02922410e5502a0634b00c095f2",
+          "score": "f7d5d6746aead4ac252ab32cc2621cd81e88588b397c09d330ea1e898f5dc565"
+        }
+      },
+      "historical_variance_note": "Earlier reader/judge passes scored 53.80 and 57.02 QS; the current hash-bound full rerun is the reported result.",
+      "development_note": "The same 31 public hard questions were used for aggregate evidence-recall tuning; this is not an independent held-out result."
+    }
+  }
+}

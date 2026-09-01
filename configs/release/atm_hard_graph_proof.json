@@ -1,0 +1,69 @@
+{
+  "schema_version": 2,
+  "track": "atm-hard-graphmemix-forest",
+  "status": "development-set extension; not part of the held-out benchmark suite",
+  "questions": 31,
+  "graph_builder": {
+    "agent": "pi",
+    "model": "deepseek-v4-flash",
+    "thinking": "medium",
+    "prompt": "configs/release/prompts/atm_hard_evidence_graph_v3_compact.txt",
+    "protocol": "deepseek-iterative-evidence-graph-v3-compact",
+    "tools": ["read", "bash", "grep", "find", "ls"],
+    "timeout_seconds": 1800
+  },
+  "selector": {
+    "protocol": "atm-hard-graphmemix-forest-v3",
+    "routing_signal": "canonical_qtype_only",
+    "solver": "deterministic-1swap-with-exact-kruskal-forest",
+    "budgets": {
+      "list_recall": 16,
+      "number": 10,
+      "open_end": 16
+    },
+    "source_prior_limits": {
+      "list_recall": 8,
+      "number": 4,
+      "open_end": 0
+    },
+    "source_prior_weights": {
+      "list_recall": 0.75,
+      "number": 0.75,
+      "open_end": 0.0
+    },
+    "structural_coverage_weights": {
+      "list_recall": 0.2,
+      "number": 0.2,
+      "open_end": 0.2
+    },
+    "edge_incidence_weights": {
+      "list_recall": 0.25,
+      "number": 0.0,
+      "open_end": 0.0
+    },
+    "graph_context_gate": "number-only unsupported temporal aggregate and multi-branch coverage obligation",
+    "high_media_limits": {
+      "list_recall": 8,
+      "number": 6,
+      "open_end": 6
+    },
+    "edge_weight": 0.1,
+    "root_cost": 0.12,
+    "uses_question_text_rules": false,
+    "uses_gold": false
+  },
+  "reader": {
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "medium",
+    "max_model_len": 32768,
+    "max_output_tokens": 1000,
+    "video_frames": 2,
+    "ocr_budget_chars": 320,
+    "respect_selected_actions": true
+  },
+  "judge": {
+    "model": "gpt-5-mini",
+    "protocol": "atm-bench-official-llm-judge-prompt-bound-v1"
+  },
+  "result_status": "Current hash-bound unified development-set rerun: 57.95 QS (list_recall 74.70, number 66.67, open_end 38.46) with the GPT-5-mini ATM-Bench official judge prompt. Earlier 53.80/57.02 runs are variance context; legacy mixed-contract scores are not attributed to this protocol."
+}
