@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Mapping
 
-from mm_memory_bench.harness import _resolved_question
+from mm_memory_bench.runner.benchmark import _resolved_question
 from mm_memory_bench.methods import (
     ConcreteMemixMethod,
     FaissFlatIPIndex,
@@ -20,7 +20,7 @@ from mm_memory_bench.methods import (
 )
 from mm_memory_bench.methods import concrete_memix as concrete_memix_module
 from mm_memory_bench.methods.media import question_text as canonical_question_text
-from mm_memory_bench.reader import BundleReader
+from mm_memory_bench.benchmarks.reader import BundleReader
 
 
 CORE_FILES = (

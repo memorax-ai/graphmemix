@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mm_memory_bench.core import BundleWriter, SchemaError, content_text, validate_bundle
-from mm_memory_bench.reader import BundleReader
+from mm_memory_bench.benchmarks.bundle import BundleWriter, SchemaError, content_text, validate_bundle
+from mm_memory_bench.benchmarks.reader import BundleReader
 
 
 class BundleWriterTest(unittest.TestCase):

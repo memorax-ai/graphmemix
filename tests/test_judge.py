@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from typing import Any, Mapping
 
-from mm_memory_bench.core import BundleWriter, content_text
-from mm_memory_bench.judge import judge_predictions
+from mm_memory_bench.benchmarks.bundle import BundleWriter, content_text
+from mm_memory_bench.evaluation.judge import judge_predictions
 
 
 class FakeJudge:

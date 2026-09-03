@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Mapping
 
-from mm_memory_bench.harness import _prediction_record, _resolved_question
+from mm_memory_bench.runner.benchmark import _prediction_record, _resolved_question
 from mm_memory_bench.methods.base import GenerationConfig
 from mm_memory_bench.methods.backends import (
     ContextWindowExceeded,
@@ -24,8 +24,8 @@ from mm_memory_bench.methods.backends import (
 )
 from mm_memory_bench.methods.concrete_memix import ConcreteMemixMethod, _reader_data_url
 from mm_memory_bench.methods.media import question_text, uniformly_sample_video
-from mm_memory_bench.reader import BundleReader
-from mm_memory_bench.core import resolve_asset_path
+from mm_memory_bench.benchmarks.reader import BundleReader
+from mm_memory_bench.benchmarks.bundle import resolve_asset_path
 
 from run_memix_retrieval_only import (
     UnusedEmbedder,

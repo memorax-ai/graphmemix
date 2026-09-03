@@ -12,12 +12,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Mapping
 
-from mm_memory_bench.harness import _resolved_question
+from mm_memory_bench.runner.benchmark import _resolved_question
 from mm_memory_bench.methods.backends import OpenAICompatibleQwenVL
 from mm_memory_bench.methods.base import GenerationConfig
 from mm_memory_bench.methods.concrete_memix import CAPTION_PROMPT, _reader_data_url
 from mm_memory_bench.methods.media import question_text
-from mm_memory_bench.reader import BundleReader
+from mm_memory_bench.benchmarks.reader import BundleReader
 
 from graphmemix_core import (
     MEMORY_SNIPPET_PROTOCOL, candidate_pool, file_sha256, load_adjacency, memory_snippet,

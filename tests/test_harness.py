@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from typing import Any, Mapping
 
-from mm_memory_bench.core import BundleWriter, content_asset, content_text
-from mm_memory_bench.harness import digest_bundle, run_bundle
+from mm_memory_bench.benchmarks.bundle import BundleWriter, content_asset, content_text
+from mm_memory_bench.runner.benchmark import digest_bundle, run_bundle
 
 
 class RecordingMethod:

@@ -8,12 +8,12 @@ import time
 from pathlib import Path
 from typing import Any, Mapping
 
-from mm_memory_bench.harness import _resolved_question
+from mm_memory_bench.runner.benchmark import _resolved_question
 from mm_memory_bench.methods import (
     FaissFlatIPIndex,
     GMEQwen2VLEmbedder,
 )
-from mm_memory_bench.reader import BundleReader
+from mm_memory_bench.benchmarks.reader import BundleReader
 
 from run_memix_retrieval_only import (
     SOURCE_PRIOR_PROTOCOL,

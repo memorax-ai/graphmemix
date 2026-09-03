@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
-from .core import iter_jsonl, read_json, write_json
+from ..benchmarks.bundle import iter_jsonl, read_json, write_json
 
 
 JUDGE_RUBRIC = """You are a strict, benchmark-agnostic evaluator for multimodal memory QA.

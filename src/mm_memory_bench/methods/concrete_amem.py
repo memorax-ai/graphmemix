@@ -14,7 +14,7 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from ..captions import (
+from ..preprocessing.captions import (
     CAPTION_PROMPT,
     caption_cache_key,
     load_cached_caption,

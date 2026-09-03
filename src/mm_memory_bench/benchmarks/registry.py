@@ -6,10 +6,10 @@ from typing import Any, Callable
 
 
 CONVERTERS = {
-    "atm_bench": "mm_memory_bench.converters.atm:convert",
-    "mem_gallery": "mm_memory_bench.converters.mem_gallery:convert",
-    "memeye": "mm_memory_bench.converters.memeye:convert",
-    "h2hmem": "mm_memory_bench.converters.h2hmem:convert",
+    "atm_bench": "mm_memory_bench.benchmarks.converters.atm:convert",
+    "mem_gallery": "mm_memory_bench.benchmarks.converters.mem_gallery:convert",
+    "memeye": "mm_memory_bench.benchmarks.converters.memeye:convert",
+    "h2hmem": "mm_memory_bench.benchmarks.converters.h2hmem:convert",
 }
 
 
