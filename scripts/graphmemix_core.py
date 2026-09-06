@@ -8,7 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from mm_memory_bench.text_cleaning import clean_ocr_text
+from mm_memory_bench.preprocessing.text import clean_ocr_text
 
 
 MEMORY_SNIPPET_PROTOCOL = (

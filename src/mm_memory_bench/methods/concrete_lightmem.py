@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from ..captions import CAPTION_PROMPT, caption_cache_key, load_cached_caption, save_cached_caption
+from ..preprocessing.captions import CAPTION_PROMPT, caption_cache_key, load_cached_caption, save_cached_caption
 from .backends import AnswerModel, OpenAICompatibleQwenVL, data_url
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
 from .concrete_memguide import public_captions

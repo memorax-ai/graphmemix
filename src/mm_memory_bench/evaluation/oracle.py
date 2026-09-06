@@ -7,11 +7,11 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .harness import _prediction_record, _resolved_memory, _resolved_question
-from .methods.backends import AnswerModel, ContextWindowExceeded, OpenAICompatibleQwenVL
-from .methods.base import GenerationConfig
-from .methods.media import openai_content_from_parts, question_text
-from .reader import BundleReader
+from ..benchmarks.reader import BundleReader
+from ..methods.backends import AnswerModel, ContextWindowExceeded, OpenAICompatibleQwenVL
+from ..methods.base import GenerationConfig
+from ..methods.media import openai_content_from_parts, question_text
+from ..runner.benchmark import _prediction_record, _resolved_memory, _resolved_question
 
 
 H2H_ALIAS_RE = re.compile(r"^S(\d+)-(\d+)$")

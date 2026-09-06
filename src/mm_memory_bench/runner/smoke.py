@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
-from .harness import MemoryMethod, run_context
-from .reader import BundleReader, ContextBatch
+from ..benchmarks.reader import BundleReader, ContextBatch
+from .benchmark import MemoryMethod, run_context
 
 
 def _evidence_ids(question: Mapping[str, Any]) -> list[str]:

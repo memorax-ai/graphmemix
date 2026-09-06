@@ -5,8 +5,8 @@ import json
 import sys
 from pathlib import Path
 
-from .core import SchemaError, validate_bundle
-from .registry import CONVERTERS, convert
+from .benchmarks.bundle import SchemaError, validate_bundle
+from .benchmarks.registry import CONVERTERS, convert
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -235,7 +235,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         if args.command == "run-method":
-            from .harness import digest_bundle, run_bundle
+            from .runner.benchmark import digest_bundle, run_bundle
             from .methods import (
                 ConcreteAMemMethod,
                 ConcreteMemGuideMethod,
@@ -505,7 +505,7 @@ def main(argv: list[str] | None = None) -> int:
                 ConcreteMemixMethod,
                 GenerationConfig,
             )
-            from .smoke import run_diagnostic_smoke
+            from .runner.smoke import run_diagnostic_smoke
 
             generation = GenerationConfig(
                 model=args.model,
@@ -578,7 +578,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "run-oracle":
             from .methods import GenerationConfig
-            from .oracle import run_oracle_bundle
+            from .evaluation.oracle import run_oracle_bundle
 
             generation = GenerationConfig(
                 model=args.model,
@@ -600,7 +600,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         if args.command == "judge":
-            from .judge import backend_from_env, judge_predictions
+            from .evaluation.judge import backend_from_env, judge_predictions
 
             backend = backend_from_env(
                 model=args.model,

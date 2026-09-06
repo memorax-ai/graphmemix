@@ -3,10 +3,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mm_memory_bench.converters.memeye import convert
-from mm_memory_bench.core import load_bundle, validate_bundle
-from mm_memory_bench.harness import _visible_context
-from mm_memory_bench.reader import BundleReader
+from mm_memory_bench.benchmarks.converters.memeye import convert
+from mm_memory_bench.benchmarks.bundle import load_bundle, validate_bundle
+from mm_memory_bench.runner.benchmark import _visible_context
+from mm_memory_bench.benchmarks.reader import BundleReader
 
 
 class MemEyeConverterTest(unittest.TestCase):

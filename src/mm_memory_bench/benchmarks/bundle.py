@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 
-from . import SCHEMA_VERSION
+from .. import SCHEMA_VERSION
 
 
 TABLES = ("contexts", "memories", "assets", "questions")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mm_memory_bench.text_cleaning import clean_labeled_ocr_block, clean_ocr_text
+from mm_memory_bench.preprocessing.text import clean_labeled_ocr_block, clean_ocr_text
 
 
 def test_clean_ocr_deduplicates_lines_and_removes_boilerplate() -> None:

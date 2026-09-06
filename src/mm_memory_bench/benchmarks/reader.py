@@ -5,7 +5,7 @@ from itertools import groupby
 from pathlib import Path
 from typing import Any, Iterator, Mapping
 
-from .core import index_by, iter_jsonl, read_json, resolve_asset_path
+from .bundle import index_by, iter_jsonl, read_json, resolve_asset_path
 
 
 @dataclass(frozen=True)

@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mm_memory_bench.converters.h2hmem import convert
-from mm_memory_bench.core import load_bundle, validate_bundle
+from mm_memory_bench.benchmarks.converters.h2hmem import convert
+from mm_memory_bench.benchmarks.bundle import load_bundle, validate_bundle
 
 
 class H2HMemConverterTest(unittest.TestCase):

@@ -18,10 +18,10 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from .backends import AnswerModel, MultiModalEmbedder, OpenAICompatibleQwenVL, data_url
-from ..captions import CAPTION_PROMPT, caption_cache_key, load_cached_caption, save_cached_caption
+from ..preprocessing.captions import CAPTION_PROMPT, caption_cache_key, load_cached_caption, save_cached_caption
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
 from .media import question_text, uniformly_sample_video
-from ..text_cleaning import clean_labeled_ocr_block
+from ..preprocessing.text import clean_labeled_ocr_block
 from .vector_index import FaissFlatIPIndex, VectorIndex
 
 

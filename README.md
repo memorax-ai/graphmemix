@@ -223,7 +223,13 @@ graph-memix/
 ├── release/                  # result and repository-integrity manifests
 ├── schema/                   # unified-memory JSON schema
 ├── scripts/                  # pipeline stages, runners, and audits
-├── src/mm_memory_bench/      # benchmark harness, converters, and methods
+├── src/mm_memory_bench/
+│   ├── benchmarks/           # canonical bundles, readers, and dataset converters
+│   ├── evaluation/           # judges and oracle evaluation
+│   ├── methods/              # BaseMemoryMethod and concrete memory methods
+│   ├── preprocessing/        # shared caption and text preprocessing
+│   ├── runner/               # benchmark and smoke-test runners
+│   └── cli.py                # mmmb and graphmemix command-line entry point
 ├── tests/                    # unit and integration tests
 ├── CITATION.cff
 ├── pyproject.toml

@@ -6,8 +6,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Mapping, Protocol, runtime_checkable
 
-from .core import TOOL_SENSITIVE_KEYS, normalized_tool_key
-from .reader import BundleReader, ContextBatch
+from ..benchmarks.bundle import TOOL_SENSITIVE_KEYS, normalized_tool_key
+from ..benchmarks.reader import BundleReader, ContextBatch
 
 
 @runtime_checkable

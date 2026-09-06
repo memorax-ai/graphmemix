@@ -6,14 +6,14 @@ import json
 import time
 from pathlib import Path
 
-from mm_memory_bench.harness import _resolved_memory, _visible_context
+from mm_memory_bench.runner.benchmark import _resolved_memory, _visible_context
 from mm_memory_bench.methods import (
     ConcreteMemixMethod,
     FaissFlatIPIndex,
     GMEQwen2VLEmbedder,
     GenerationConfig,
 )
-from mm_memory_bench.reader import BundleReader
+from mm_memory_bench.benchmarks.reader import BundleReader
 
 
 class UnusedAnswerModel:

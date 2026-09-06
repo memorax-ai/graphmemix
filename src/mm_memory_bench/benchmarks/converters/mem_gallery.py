@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping
 
-from ..core import (
+from ..bundle import (
     BundleWriter,
     SchemaError,
     content_asset,
