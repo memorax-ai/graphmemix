@@ -7,6 +7,7 @@ dist/
 build/
 
 # Machine-local environments and temporary files.
+/tmp/
 .apptainer-tmp/
 .runtime*/
 .all-git/
