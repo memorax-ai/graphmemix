@@ -1,0 +1,160 @@
+# 新增六个 benchmark 的数据接入
+
+本文统一说明 MobileMem 文本版、MobileMem-Omni、SMMBench、Persona-MME、PersonaMem-v2 和 M³Exam 公开示例的数据接入：下载官方快照、转换统一 bundle、验证引用和资产，并通过仓库已有入口运行评测。这些接入不属于原论文固定四个 benchmark 的结果，也不表示已经复现各数据集的原生评分协议。
+
+## 与原仓库的关系
+
+```text
+官方数据快照
+  └─ hf download（MobileMem text）或 scripts/download_additional_benchmarks.py
+       └─ data/raw/<benchmark>/
+            └─ mmmb convert <benchmark> --raw-root data/raw --output-root data/unified
+                 └─ benchmarks/registry.py → converters/<benchmark>.py
+                      └─ BundleWriter → validate_bundle(check_assets=True)
+                           └─ data/unified/<benchmark>/
+                                ├─ manifest.json
+                                ├─ contexts.jsonl
+                                ├─ memories.jsonl
+                                ├─ assets.jsonl
+                                └─ questions.jsonl
+```
+
+转换后的目录继续由原有 `BundleReader`、method adapter、Reader 和 Judge 读取。无需为每个 method 再写一份新 benchmark 格式解析器。但 PDF 输入、工具规划题、特殊原生评分等仍需分别验证下游能力；有 bundle 不等于所有方法已经跑通。
+
+## 本次文件
+
+| 文件 | 做什么；输入 → 输出 |
+|---|---|
+| [下载脚本](../scripts/download_additional_benchmarks.py) | 官方 HF/GitHub 快照 → 原始数据、媒体、版本与 SHA256 清单；不运行下载的代码。默认官方入口，可配置内容镜像。 |
+| [mobilemem.py](../src/mm_memory_bench/benchmarks/converters/mobilemem.py) | MobileMem 原生文本 JSON → context、消息、最终题目及证据引用。 |
+| [registry.py](../src/mm_memory_bench/benchmarks/registry.py) | 在已有注册表增加六个名称；名称 → 对应 converter。 |
+| [mobilemem_omni.py](../src/mm_memory_bench/benchmarks/converters/mobilemem_omni.py) | Omni 对话、图片和全量/过滤版问题 → 同一个 bundle 的互斥题目子集。 |
+| [smmbench.py](../src/mm_memory_bench/benchmarks/converters/smmbench.py) | cluster 内多来源消息、证据位置、选择题及调用计划 → bundle。 |
+| [persona_mme.py](../src/mm_memory_bench/benchmarks/converters/persona_mme.py) | 人物多 session 对话和 `<img>` 图片、主问题和 alignment 正负样本 → bundle。 |
+| [personamem_v2.py](../src/mm_memory_bench/benchmarks/converters/personamem_v2.py) | benchmark CSV 引用的文本/多模态、32k/128k 历史 → 四种子集。 |
+| [m3exam.py](../src/mm_memory_bench/benchmarks/converters/m3exam.py) | 官方 `example_set` 的对话、图片、PDF、题目 → **示例** bundle。 |
+| [_shared.py](../src/mm_memory_bench/benchmarks/converters/_shared.py) | 共用的文本/选择题封装、资产登记、base64 图片落盘；复用原 `BundleWriter`。 |
+| [转换测试](../tests/test_additional_benchmark_converters.py) | 六个 benchmark 的原生格式 fixture → 检查转换、输入隔离、运行接口、证据对应、版本隔离、答案私有字段、资产缺失处理；无模型调用。 |
+
+## 一条 memory、一条 question 分别是什么
+
+| Benchmark | 一条 memory | 一条 question / 原生能力字段 | 证据处理与协议边界 |
+|---|---|---|---|
+| MobileMem text | 每个原生 session 的一条消息，包括应用产生的 system 事件；保留来源、角色和时间，作为记忆数据，不作为模型指令。 | 仅选最终 `question_type_toolbook.question_types[*].qa_pairs`；原生 `question_type` 保留为 `task.subcategory`。 | 原生消息引用映射到 `evidence.memory_id`，重复引用去重；旧 QA、生成日志和最终画像不进入模型输入。 |
+| MobileMem-Omni | 一个 session 中的一条原始 dialogue 消息；`image_inline` 成为图片资产。 | 一条原生 QA；`question_type` 保留为子类。全量题按是否属于过滤版分为 `filtered` / `unfiltered_only`。 | 原生证据主要定位 session，展开为该 session 全部消息，**不是精确消息级 gold**。解释、问题的 `image_refs`、生成画像不会混入历史。 |
+| SMMBench | 一个 cluster 内某个来源流的一条消息；保留说话人、时间与 `source_id`。嵌套 JSON 中的图片也登记资产，保留 `Fig.` 引用标签；描述性原生 caption 留在私有元数据中。 | 一条 cluster 内 QA；保留原生 category/domain。普通题为 MCQ，Function_Call 为结构化调用计划。 | 按 `conversation_name + insert_conversation_turn` 的零基位置定位。干扰证据放 `misleading_evidence`，不算 gold。来源流不擅自切成 session。 |
+| Persona-MME | 原生 session 中的 user 或 assistant 一次发言；按 `<img>` 顺序绑定图片。 | 主选择题，以及原生 alignment 的 chosen/rejected 各一道二选一题；分别分组报告。 | 没有消息级标准证据。本接入为 **history-only**，不额外给原生显式 profile；与使用 profile 先验的官方设置需区分。 |
+| PersonaMem-v2 | 原生历史的一条 role/content 消息，包括原生已有的 system 人物介绍；多模态 base64 图片落为资产。 | benchmark split 的一题在某种历史长度下的版本；mode、length、pref_type 等保留。 | CSV 的画像/偏好/答案不作为额外记忆。相关片段只在唯一、连续、逐条完全匹配时回链；否则不臆造证据 ID；回链结果是本地推导的片段定位，不代表官方定义了检索 Recall 指标。没有原生 session 划分。 |
+| M³Exam | 一次 round 的 user 或 assistant 发言，user 侧保留图片/PDF。 | 一条示例问题；保留原生 type、label 和答案列表。 | supporting round 展开至该轮两方发言；PDF 保留原文件，未宣称 Reader 已支持整篇 PDF。当前仅公开示例，不能称完整测试集。 |
+
+MobileMem-Omni 图片包的根目录是 `uid*/`，下载器将其解压到 `omni/image/`，按 GBK 解码非 UTF-8 文件名；转换器仅把目录中的空格规范为下划线，保留人物文件名中的空格。没有重新生成图片。
+
+所有题目的答案与证据仍位于评估侧字段。`memories.jsonl` 是待摄入的数据，不是提前由某种方法提炼好的内部记忆。资产使用相对路径指向原始数据目录，**搬运 bundle 时必须同时保留对应 raw 资产或重新打包路径**。
+
+PersonaMem-v2 在同一 mode 的 32k/128k 版本共享 semantic_question_id；它们是历史长度实验条件，汇总时不要当成两道独立语义题。选择题采用固定 SHA256 种子打乱选项，避免依赖官方脚本中跨 Python 进程不稳定的 `hash()`；选项顺序可能不同，标准答案随之同步映射。
+
+## MobileMem 文本版的转换约定
+
+- `person.id` 对应一个 context，不额外提供用户画像；消息保留原生 ID，并按时间建立顺序。
+- 重复身份、引用其他用户轨迹的证据会导致转换失败。所有 session 在回答前可用；本接入不把 `effective_timestamp` 当成历史截断点。
+- 原生单选、多选题的选项已写在问题文本中，因此保留原问题及文本回答形式，不猜测拆分选项。原生题型另存于 `metadata.native_question_form`。
+- `answer.text` 保存首个原生参考答案，`answer.accepted_answers` 保存原始参考列表；这是数据保留约定，不在此规定列表的评分语义。答案与证据不交给普通方法的 Reader。
+- 无证据题仍保留；已有证据 Oracle 会报告证据不可用。原生能力标签直接保留，跨 benchmark 的能力分类属于另外的工作。
+
+固定快照生成 2 个 context、203 个 session、1,600 条 memory、1,319 道题，无媒体资产。1,981 次原始证据引用均能定位，原生 12 类题型和 3 种问题形式的统计保存在 manifest 的 `release_counts` 中。
+
+## 下载与转换命令
+
+在已经安装仓库环境和 `huggingface_hub` 的机器上执行；不需要 GPU 或模型密钥。默认下载官方源，网络不通时通过系统代理或 `--hf-download-endpoint` 指定镜像。大于 64 MiB 的文件分块下载并支持断点续传，最终核对官方 Git/LFS 哈希；`--workers` 控制下载并发。示例路径适用于仓库根目录。
+
+### MobileMem 文本版
+
+```bash
+hf download zjunlp/MobileMem --repo-type dataset \
+  --revision e9f9fcc97af72ea1c0b129560ec08d4c03d8c810 \
+  --include 'text/mobilemem_data.json' --local-dir data/raw/mobilemem
+
+mmmb convert mobilemem --raw-root data/raw --output-root data/unified
+mmmb validate data/unified/mobilemem --check-assets
+```
+
+该源文件的 SHA-256 为 `73977e068030cee506c32b4cd01cdec788938777450a57312b5f27ce136745b1`。转换器将实际源文件哈希写入 manifest；其他快照也可转换，但比较结果时必须固定版本。
+
+### 其余五个数据入口
+
+```bash
+python scripts/download_additional_benchmarks.py \
+  mobilemem_omni smmbench persona_mme personamem_v2 m3exam \
+  --raw-root data/raw --workers 12
+
+for bench in mobilemem_omni smmbench persona_mme personamem_v2 m3exam; do
+  mmmb convert "$bench" --raw-root data/raw --output-root data/unified
+  mmmb validate "data/unified/$bench" --check-assets
+done
+```
+
+已有输出需要重新生成时，确认路径后为 `convert` 加 `--overwrite`。下载仅涵盖 PersonaMem-v2 benchmark split 引用的历史，不下载训练集/验证集；M³Exam 仅涵盖当前公开 `example_set`。
+
+## 使用已有评测入口
+
+数据接入后的调用关系不变：
+
+```mermaid
+flowchart LR
+    A[官方数据] --> B[converter / registry]
+    B --> C[统一 bundle]
+    C --> D[validate]
+    C --> E[run-method: 摄入、检索、回答]
+    C --> F[run-oracle: 标准证据回答]
+    E --> G[predictions.jsonl]
+    F --> G
+    G --> H[已有 judge 入口]
+    C --> H
+```
+
+使用环境中已配置的 `READER_URL`、`READER_MODEL`、`JUDGE_URL`、`JUDGE_MODEL` 和相应密钥。以下以 MobileMem 文本版演示仓库已有的 Oracle 和评分命令：
+
+```bash
+mmmb run-oracle data/unified/mobilemem \
+  --output runs/mobilemem/oracle/predictions.jsonl \
+  --base-url "$READER_URL" --model "$READER_MODEL" \
+  --memory-view raw --concurrency 2
+
+mmmb judge data/unified/mobilemem runs/mobilemem/oracle/predictions.jsonl \
+  --output runs/mobilemem/oracle/judgments.jsonl \
+  --base-url "$JUDGE_URL" --model "$JUDGE_MODEL" \
+  --api-key-env JUDGE_API_KEY --concurrency 1
+```
+
+Reader 使用其现有密钥环境变量（通常是 `OPENAI_API_KEY`），上例评分使用 `JUDGE_API_KEY`。小样本可给两条命令传同一个 `--question-ids` 文件。每次试验使用独立输出目录；Oracle 会重写预测文件，Judge 可续跑兼容记录。无标准证据的数据集不能直接套用证据 Oracle。
+
+普通方法仍使用 `mmmb run-method <method> <bundle>`，按各方法的原配置准备 embedding、压缩等模型；这里不提供替换模型的轻量配置。问题白名单只限制回答题目，不会自动缩短摄入历史。长任务可使用已有的 `--resume-predictions`、`--continue-on-query-error`，并单独报告失败题目。
+
+评分输出沿用 `judgments.jsonl` 和 `judgments.summary.json`。Oracle 衡量标准证据条件下的回答能力；普通方法包含摄入与检索。两者结果必须分开标注，通用评分不等于原生评分协议复现。
+
+## 验证范围与限制
+
+- 六个入口已做数据转换、ID/证据引用及资产完整性检查；对应测试文件见上表。
+- MobileMem 文本版已做 Oracle 和方法小样本；其余五个数据入口也已完成五种方法的小样本执行。诊断使用缩短历史，部分切片按标准证据选取，不能作为正式成绩。
+- 当时的 LightMem 成功运行依赖单独的来源关联修复；仅提交数据转换代码不保证复现该方法的成功结果。运行记录属于当时工作区的验证，不能直接当作隔离后数据适配 MR 的验收。
+- SMMBench 的 LightMem/VimRAG 候选工具传递尚有缺口；工具规划的通用评分不替代原生 FC 指标。
+- M³Exam 仅公开示例，现有方法没有完整的原始 PDF 内容读取路径；文件校验通过不等于模型读取了 PDF。
+- Persona-MME 使用 history-only；PersonaMem-v2 四种条件需分别报告。Omni 当前公开题单与论文题单的对应关系尚未确认。
+
+## 官方来源
+
+- [MobileMem 数据](https://huggingface.co/datasets/zjunlp/MobileMem)、[Omni 转换参考](https://github.com/zjunlp/MobileMem/blob/main/omni/eval/eval/Raw2Locomo.py)。
+- [SMMBench 数据](https://huggingface.co/datasets/HuacanChai/SMMBench)、[官方评测实现](https://github.com/FatCatCHC/SMMBench)。
+- [Persona-MME 数据](https://huggingface.co/datasets/ClareNie/Persona-MME)、[PersonaVLM](https://github.com/MiG-NJU/PersonaVLM)。
+- [PersonaMem-v2 数据](https://huggingface.co/datasets/bowen-upenn/PersonaMem-v2)、[官方推理脚本](https://github.com/bowen-upenn/PersonaMem-v2/blob/main/inference.py)。
+- [M³Exam 官方仓库与公开示例](https://github.com/EverM0re/M-3-Exam)。
+
+实际下载版本和本机完整性以各 `data/raw/<name>/download-manifest.json`、`download-files.json` 为准。
+
+## 转换测试
+
+```bash
+python -m unittest discover -s tests -p 'test_additional_benchmark_converters.py'
+```
+
+该文件统一覆盖六个数据入口及下载完整性，不调用模型或依赖 Judge 新增功能。
