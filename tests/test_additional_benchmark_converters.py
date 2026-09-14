@@ -171,11 +171,35 @@ class AdditionalConverters(unittest.TestCase):
                 w.writerow(row)
         convert("personamem_v2", self.raw, self.out)
         qs = self.rows("personamem_v2", "questions")
-        self.assertEqual(len(qs), 4)
+        self.assertEqual(len(qs), 6)
         self.assertEqual(qs[0]["semantic_question_id"], qs[1]["semantic_question_id"])
         self.assertEqual(qs[0]["choices"], qs[1]["choices"])
         self.assertTrue(all(len(q["evidence"]) == 1 for q in qs))
         self.assertNotIn("DO_NOT_INJECT", str(self.rows("personamem_v2", "memories")))
+        opened = [q for q in qs if q["subset"].endswith("_generative")]
+        self.assertEqual(len(opened), 2)
+        by_id = {q["question_id"]: q for q in qs}
+        for row in opened:
+            paired = by_id[row["metadata"]["paired_mcq_question_id"]]
+            self.assertEqual(row["prompt"], paired["prompt"])
+            self.assertEqual(row["context_id"], paired["context_id"])
+            self.assertEqual(row["semantic_question_id"], paired["semantic_question_id"])
+            self.assertEqual(row["evidence"], paired["evidence"])
+            self.assertEqual(row["instruction"], "")
+            self.assertNotIn("choices", row)
+            self.assertEqual(row["answer"], {"text": "Blue"})
+            self.assertEqual(row["metadata"]["preference"], "DO_NOT_INJECT")
+            self.assertEqual(row["prompt"][0]["text"], row["metadata"]["native_user_query"] + " Please recall my related preferences from our conversation history to give personalized responses.")
+            self.assertEqual(row["task"]["response_type"], "text")
+            public = _resolved_question(BundleReader(self.out / "personamem_v2"), row)
+            self.assertNotIn("DO_NOT_INJECT", str(public))
+            self.assertNotIn("answer", public)
+            self.assertNotIn("choices", public)
+            self.assertNotIn("preference", public.get("metadata", {}))
+
+        self.assertEqual(len(self.rows("personamem_v2", "contexts")), 4)
+        self.assertEqual(len(self.rows("personamem_v2", "memories")), 8)
+
 
     def test_smm_zero_based_assignment_and_misleading_separation(self):
         self.write(

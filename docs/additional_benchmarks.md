@@ -155,6 +155,60 @@ Reader 使用其现有密钥环境变量（通常是 `OPENAI_API_KEY`），上�
 
 实际下载版本和本机完整性以各 `data/raw/<name>/download-manifest.json`、`download-files.json` 为准。
 
+## PersonaMem-v2 多模态开放回答
+
+现有 converter 同时生成原有四种 MCQ 条件和新增的两种多模态 `generative` 条件。文本开放题不在本轮范围。与官方 `inference.py` 的 `generative` 路径一致：复用同一 CSV 行的 `user_query` 和对应历史，追加原有偏好回忆指令，不添加 MCQ 选项消息。原始问题、历史和偏好不进行改写。
+
+| 记录 | 本次处理 |
+|---|---|
+| 原有 MCQ | 保留原 ID、subset、选项、答案及字段内容 |
+| 新开放题 | ID 为配对 MCQ ID 加 `:generative`；subset 为 `multimodal_32k_generative` 或 `multimodal_128k_generative` |
+| 历史、图片、证据 | 与配对 MCQ 共用 context、memory、asset 和 evidence，不复制记忆；片段证据仍是本地匹配推导，非官方标准检索证据 |
+| 提问与回答格式 | prompt 与配对 MCQ 相同，去除 choices，instruction 为空，response_type 为 text |
+| 标准字段 | answer.text 原样保存 CSV correct_answer；metadata.preference 和 prev_pref 保存原始字段，native_judge_kind 按官方 `preference.lower().startswith("do not")` 选择正/负向 |
+| 信息隔离 | 偏好等新字段属于评估侧 metadata，现有 `_resolved_question()` 不传给 method；原历史已包含的信息照常保留 |
+
+固定官方数据快照含 20,000 条原有 MCQ，新增 10,000 条多模态开放题；合计 30,000 条**实验记录**，不是 30,000 道独立语义问题。记忆与图片数量不变。官方数据 revision 为 `ed956dea41521fc4499acbc63f966e0fd3c053ba`；此次对照的官方代码 revision 为 `d29d91d016add354e459dfeb0d24af08bc402e2a`。
+
+转换沿用上文 `mmmb convert personamem_v2`。运行时必须按轨道选题，例如为多模态 32k 开放题生成白名单：
+
+```bash
+python - <<'PYIDS'
+import json
+from pathlib import Path
+bundle = Path("data/unified/personamem_v2")
+ids = []
+for line in (bundle / "questions.jsonl").open():
+    q = json.loads(line)
+    if q.get("subset") == "multimodal_32k_generative":
+        ids.append(q["question_id"])
+Path("generative_32k_ids.txt").write_text("\n".join(ids) + "\n")
+PYIDS
+```
+
+将该文件传给原有 `run-method ... --question-ids generative_32k_ids.txt`，使用各方法原有模型配置。MCQ 和开放题使用不同预测文件；记忆索引能否共用仍遵循各 method 的 checkpoint 约束，不自动复用旧预测。
+
+**开放题使用独立的原生偏好评分协议**，复用现有 `judge` 命令。默认 `qa` 协议仍然是原有二元正确性 Judge；显式选择 `personamem_v2_open` 时，使用官方 narrow 正/负向 prompt，输入只有原始问题、目标偏好和模型回答，输出 0～1 分。不能用 MCQ 脚本替代。
+
+```bash
+mmmb judge data/unified/personamem_v2 generative_predictions.jsonl \
+  --output generative_judgments.jsonl \
+  --model "$JUDGE_MODEL" --base-url "$JUDGE_URL" \
+  --api-key-env JUDGE_API_KEY \
+  --scoring-protocol personamem_v2_open \
+  --question-ids generative_32k_ids.txt --concurrency 4
+```
+
+需要重新转换 bundle，以包含开放题 `metadata.native_user_query`：它原样保存追加回忆指令之前的题目。缺字段时明确报错，不从 Reader prompt 猜测恢复。原有 MCQ 字段保持不变。原始问题、偏好等评估侧 metadata 不传给 method。
+
+`judgments.jsonl` 保存 `score`、`judge_response`、`preference_kind`、协议及输入哈希，不产生 `correct`。汇总报告 `mean_score_valid_only`、`mean_score_conservative`，以及按历史长度和偏好正负向分组的均分，不称为 Accuracy，也不把两个长度当作独立语义题混报。
+
+沿用官方一次 narrow Judge 调用；保留官方数值解析顺序和 boxed 分数裁剪规则。无法解析时按官方返回 0，仍属于已完成评分；API 调用异常才记录为可续跑的评分错误。协议已更新为 `mmmb-personamem-v2-narrow-1.1`，避免复用旧解析规则的缓存。生成失败或空回答计 0，不调用 Judge。修改评分输入、预测、模型或协议后不复用旧记录；首次运行旧的无输入哈希评分文件会重新评分。
+
+MCQ 与开放题需分别选题、保存输出；`score_script.py` 仅用于支持的脚本题。通用二元 Judge 仍可显式用于额外的答案正确性分析，但不代表原生偏好得分。
+
+官方来源：[生成路径](https://github.com/bowen-upenn/PersonaMem-v2/blob/d29d91d016add354e459dfeb0d24af08bc402e2a/inference.py)、[偏好评分输入](https://github.com/bowen-upenn/PersonaMem-v2/blob/d29d91d016add354e459dfeb0d24af08bc402e2a/inference_utils.py)、[数据快照](https://huggingface.co/datasets/bowen-upenn/PersonaMem-v2/tree/ed956dea41521fc4499acbc63f966e0fd3c053ba)。
+
 ## 转换测试
 
 ```bash

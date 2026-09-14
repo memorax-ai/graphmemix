@@ -1,8 +1,9 @@
-"""PersonaMem-v2 benchmark MCQ tracks, preserving native history inputs."""
+"""PersonaMem-v2 benchmark MCQ and multimodal generative tracks, preserving native history inputs."""
 
 from __future__ import annotations
 
 import csv
+from copy import deepcopy
 import hashlib
 import random
 from pathlib import Path
@@ -24,7 +25,8 @@ def convert(raw_root: Path, output_root: Path, *, overwrite=False):
         "benchmark": "PersonaMem-v2",
         "source_snapshot": source_manifest(root),
         "evaluation": {
-            "scope": "benchmark split; text/multimodal x 32k/128k",
+            "scope": "benchmark split; text/multimodal MCQ x 32k/128k; multimodal generative x 32k/128k",
+            "generative": "same native user_query and history as MCQ; no options; preference is evaluation-only metadata; native preference scoring via judge --scoring-protocol personamem_v2_open",
             "options": "deterministic SHA256-seeded permutation",
             "profile_prior": "native system history messages retained, as in upstream loader; CSV profile/preference fields not injected",
             "evidence": "unique exact contiguous snippet match only; otherwise unannotated",
@@ -153,4 +155,29 @@ def convert(raw_root: Path, output_root: Path, *, overwrite=False):
                         native_related_conversation_snippet=snippet,
                     )
                     w.add_question(q)
+                    if mode == "multimodal":
+                        preference = row.get("preference")
+                        if not isinstance(preference, str) or not preference.strip():
+                            raise SchemaError(f"{source}:{i}: generative track requires native preference")
+                        # Reuse the exact original query, evidence and history; only the
+                        # MCQ-specific response instruction and choices are removed.
+                        opened = deepcopy(q)
+                        opened["question_id"] = q["question_id"] + ":generative"
+                        opened["subset"] = f"{mode}_{size}_generative"
+                        opened["instruction"] = ""
+                        opened["task"]["response_type"] = "text"
+                        opened.pop("choices", None)
+                        opened["answer"] = {"text": row["correct_answer"]}
+                        opened["metadata"].update(
+                            native_eval_mode="generative",
+                            native_user_query=as_text(query),
+                            paired_mcq_question_id=q["question_id"],
+                            preference=preference,
+                            prev_pref=row.get("prev_pref"),
+                            # Match upstream evaluate_narrow_judge dispatch exactly.
+                            native_judge_kind="negative"
+                            if preference.lower().startswith("do not") else "positive",
+                            scoring_target="preference_alignment",
+                        )
+                        w.add_question(opened)
     return validate_bundle(output_root, check_assets=True)
