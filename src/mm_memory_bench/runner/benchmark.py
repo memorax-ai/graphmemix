@@ -492,11 +492,17 @@ def run_bundle(
     memory_view: str = "raw",
     query_concurrency: int = 1,
     caption_sidecar: Path | None = None,
+    pdf_policy: str = "off",
+    pdf_page_images: int = 0,
     resume_predictions: bool = False,
     continue_on_query_error: bool = False,
     question_ids_path: Path | None = None,
 ) -> dict[str, Any]:
-    reader = BundleReader(bundle_root, caption_sidecar=caption_sidecar)
+    reader = BundleReader(bundle_root, caption_sidecar=caption_sidecar,
+                          pdf_policy=pdf_policy, pdf_page_images=pdf_page_images)
+    from ..preprocessing.pdf import check_pdf_checkpoint
+    check_pdf_checkpoint(getattr(method, "checkpoint_dir", None),
+                         policy=pdf_policy, page_images=pdf_page_images)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     completed_question_ids: set[str] = set()
     initial_count = 0
@@ -566,6 +572,8 @@ def run_bundle(
         "resumed_predictions": initial_count,
         "new_predictions": count - initial_count,
         "task_subcategory": task_subcategory,
+        "pdf_policy": pdf_policy,
+        "pdf_page_images": pdf_page_images,
         "memory_ingest_calls": int(timings["ingest_calls"]),
         "digest_seconds": digest_seconds,
         "answer_seconds": answer_seconds,
@@ -583,6 +591,8 @@ def digest_bundle(
     task_subcategory: str | None = None,
     memory_view: str = "raw",
     caption_sidecar: Path | None = None,
+    pdf_policy: str = "off",
+    pdf_page_images: int = 0,
     memory_ids_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build every selected context without exposing evaluation questions.
@@ -593,7 +603,11 @@ def digest_bundle(
     a cold measurement must provide a new, empty method checkpoint directory.
     """
 
-    reader = BundleReader(bundle_root, caption_sidecar=caption_sidecar)
+    reader = BundleReader(bundle_root, caption_sidecar=caption_sidecar,
+                          pdf_policy=pdf_policy, pdf_page_images=pdf_page_images)
+    from ..preprocessing.pdf import check_pdf_checkpoint
+    check_pdf_checkpoint(getattr(method, "checkpoint_dir", None),
+                         policy=pdf_policy, page_images=pdf_page_images)
     requested_memory_ids: set[str] | None = None
     if memory_ids_path is not None:
         requested_memory_ids = {
@@ -672,6 +686,8 @@ def digest_bundle(
         "subset": subset,
         "split": split,
         "task_subcategory": task_subcategory,
+        "pdf_policy": pdf_policy,
+        "pdf_page_images": pdf_page_images,
         "memory_view": memory_view,
         "memory_ids": str(memory_ids_path) if memory_ids_path else None,
         "contexts": len(context_reports),

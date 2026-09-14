@@ -31,8 +31,14 @@ class BundleReader:
     loading long per-query histories for every question or building a second index.
     """
 
-    def __init__(self, root: Path, *, caption_sidecar: Path | None = None) -> None:
+    def __init__(self, root: Path, *, caption_sidecar: Path | None = None,
+                 pdf_policy: str = "off", pdf_page_images: int = 0) -> None:
+        from ..preprocessing.pdf import PDFProcessor
+
         self.root = root.resolve()
+        self.pdf_processor = PDFProcessor(
+            pdf_policy, page_images=pdf_page_images, cache_dir=self.root / ".pdf_cache"
+        )
         self.manifest = read_json(self.root / "manifest.json")
         table_names = self.manifest.get("tables", {})
         self.table_paths = {
@@ -80,7 +86,7 @@ class BundleReader:
                 asset = self.assets[str(asset_id)]
                 value["path"] = str(resolve_asset_path(self.root, asset))
                 value["asset"] = dict(asset)
-            resolved.append(value)
+            resolved.extend(self.pdf_processor.process(value))
         return resolved
 
     def iter_context_batches(
