@@ -133,11 +133,6 @@ def convert(raw_root: Path, output_root: Path, *, overwrite=False):
                         chr(65 + j) for j, (gold, _) in enumerate(options) if gold
                     )
                     choices(q, labels, correct)
-                    q["instruction"] = (
-                        "Please choose the best answer from the following options. "
-                        "Think step by step about which answer best fits the user's query and conversation context. "
-                        "Provide your reasoning first, then give your final answer as 'Final Answer: [Letter]'"
-                    )
                     snippet = parsed(row.get("related_conversation_snippet", ""))
                     matches = []
                     if isinstance(snippet, list) and snippet:

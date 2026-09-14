@@ -7,7 +7,7 @@ from ..benchmarks.bundle import read_json, write_json
 from .native_runner import backend_from_env, get_scorer, judge_predictions
 from .native.script_judge import _load, score_predictions, score_question
 
-DISPATCH_VERSION = "mmmb-benchmark-dispatch-2.0"
+DISPATCH_VERSION = "mmmb-benchmark-dispatch-2.1"
 BENCHMARKS = {"smmbench", "persona_mme", "personamem_v2", "m3exam", "mobilemem_omni"}
 
 

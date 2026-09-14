@@ -160,17 +160,31 @@ def _personamem_v2_extract_final_answer(response: str) -> str:
             return match.group(1).upper()
     return ''
 
+def adapt_choice_prediction(benchmark, choices, prediction):
+    """Translate complete public option labels without consulting reference answers."""
+    label = prediction.strip()
+    labels = {str(choice['choice_id']).upper() for choice in choices}
+    if label.upper() not in labels:
+        return prediction
+    if benchmark == 'smmbench' and label in ('0', '1', '2', '3'):
+        return f'({chr(65 + int(label))})'
+    if benchmark == 'personamem_v2' and re.fullmatch('[A-Za-z]', label):
+        return f'Final Answer: {label.upper()}'
+    return prediction
+
+
 def choice_score(question, prediction):
-    """Dispatch to the benchmark's native parser; no shared format heuristics."""
+    """Adapt public option labels, then dispatch to the unchanged native parser."""
     valid = {str(c['choice_id']).upper(): c['text'] for c in question['choices']}
     gold = str(question['answer']['choice_id']).upper()
     if gold not in valid:
         raise ValueError('reference choice missing from choices')
     benchmark = question.get('_benchmark', 'smmbench')
+    prediction = adapt_choice_prediction(benchmark, question['choices'], prediction)
     if benchmark == 'smmbench':
         native_gold = str(question['answer'].get('native_label', question['answer']['choice_id']))
         # Official evaluate_single_qa_answer maps the native zero-based answer
-        # index to (A)..(D). Do not remap the model's raw response.
+        # index to (A)..(D), matching the public-label adapter above.
         if native_gold in ('0', '1', '2', '3'):
             native_gold = ('(A)', '(B)', '(C)', '(D)')[int(native_gold)]
         return float(check_answer_match_multiple_choice(native_gold, prediction)), 'ok'
@@ -194,7 +208,7 @@ def choice_score(question, prediction):
 
 
 BENCHMARKS = ('smmbench', 'persona_mme', 'personamem_v2', 'm3exam')
-PROTOCOL = 'mmmb-native-scripts-2.0'
+PROTOCOL = 'mmmb-native-scripts-2.1'
 
 
 def score_question(benchmark, question, prediction):

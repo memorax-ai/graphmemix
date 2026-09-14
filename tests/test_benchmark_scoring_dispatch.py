@@ -78,6 +78,32 @@ def test_script_only_cli_needs_no_model_or_api(tmp_path, monkeypatch):
     assert rows[0]["metrics"] == {"choice_accuracy": 1}
 
 
+@pytest.mark.parametrize("benchmark,labels", [
+    ("smmbench", ["0", "1"]), ("personamem_v2", ["A", "B"]),
+])
+def test_benchmark_scores_bare_labels_without_changing_inputs(tmp_path, benchmark, labels):
+    questions = [mcq(benchmark, name) for name in ("correct", "wrong")]
+    for q, gold in zip(questions, labels):
+        q["choices"] = [{"choice_id": label, "text": text}
+                        for label, text in zip(labels, ["blue", "red"])]
+        q["answer"] = {"choice_id": gold, "native_label": gold,
+                       "text": "blue" if gold == labels[0] else "red"}
+        q["instruction"] = "Select one option. Return its label."
+    bundle, predictions, output = bundle_files(tmp_path, benchmark, questions)
+    predictions.write_text(''.join(json.dumps({"question_id": q["question_id"],
+                                             "prediction": labels[0]}) + '\n'
+                                   for q in questions))
+    originals = {path: path.read_bytes() for path in
+                 [predictions, bundle / "questions.jsonl", bundle / "manifest.json"]}
+    result = dispatch.score_benchmark(bundle, predictions, output)
+    assert result["dispatch_protocol"] == "mmmb-benchmark-dispatch-2.1"
+    assert result["routes"]["script"]["summary"]["total"]["metrics"]["choice_accuracy"]["mean"] == .5
+    records = dispatch._load(Path(result["routes"]["script"]["output"]))
+    assert records[questions[0]["question_id"]]["metrics"]["choice_accuracy"] == 1
+    assert records[questions[1]["question_id"]]["metrics"]["choice_accuracy"] == 0
+    assert {path: path.read_bytes() for path in originals} == originals
+
+
 def test_m3_mixed_routes_and_resume(tmp_path, clients):
     qs = [question("m3exam", k, kind=k) for k in ["fj", "fm", "mr"]]
     b, p, out = bundle_files(tmp_path, "M3Exam", qs)

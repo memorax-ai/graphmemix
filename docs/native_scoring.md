@@ -13,23 +13,25 @@ PYTHONPATH=src python scripts/score_script.py smmbench \
 其他名称：`persona_mme`、`personamem_v2`、`m3exam`。
 小样本必须指定 `--question-ids path/to/ids.txt`（每行一个 ID），或传入对应的小样本 bundle。默认要求覆盖整个 bundle，禁止悄悄按成功预测的交集报告。重复 ID、未知 ID、缺预测会报错；方法失败保留并计零；空答案按各官方指标规则计分。
 
-生成逐题 `native_scores.jsonl` 和 `native_scores.summary.json`。逐题指标值仅为 0 或 1，汇总均值可为小数，按 subset/category/subcategory 分组，每个指标记录自己的样本数；没有跨不同指标混合的总分。协议 `mmmb-native-scripts-2.0`，不称为 Judge Acc。重跑重新计算，不复用旧缓存；汇总保留输入 SHA256。
+生成逐题 `native_scores.jsonl` 和 `native_scores.summary.json`。逐题指标值仅为 0 或 1，汇总均值可为小数，按 subset/category/subcategory 分组，每个指标记录自己的样本数；没有跨不同指标混合的总分。协议 `mmmb-native-scripts-2.1`，不称为 Judge Acc。重跑重新计算，不复用旧缓存；汇总保留输入 SHA256。
 
 ## 规则与边界
 
 | 数据集 | 本次规则 |
 |---|---|
-| SMMBench MCQ | 按官方入口先将原始正确答案序号 0/1/2/3 转为 (A)/(B)/(C)/(D)，再调用官方匹配规则比较原始响应；不把模型输出的数字偷偷转成字母 |
+| SMMBench MCQ | 评分入口将完整、有效的预测标签 0/1/2/3 映射为 (A)/(B)/(C)/(D)；标准答案沿用官方序号映射，再调用官方匹配规则 |
 | SMMBench 工具计划 | 对齐官方 `evaluate_function_call_response`：规范化大小写、补候选工具默认参数；步骤数量相同，按列表顺序比较，各步覆盖标准调用，可有额外调用；重复标准调用需逐个匹配，不比较 step 编号 |
 | Persona-MME | 使用官方 check_result 的选项解析；接受如 `(d): Fallen leaves`；按 subset 分开主问题与 alignment |
-| PersonaMem-v2 | 使用官方 extract_final_answer 的正则及优先级，再比较选项文本；四种历史条件分别汇总。多模态结果看 multimodal 子集 |
+| PersonaMem-v2 | 评分入口将完整、有效的字母预测标签包装为 `Final Answer: X`，再使用官方 extract_final_answer 的正则及优先级比较选项文本；四种历史条件分别汇总 |
 | M³Exam | fj 和其他文本题型使用 accepted_answers 计算文本 EM；fm 为任意标准图片 ID 命中，无图片 ID 时退回文本 EM。汇总均值仍按官方 aggregate 四舍五入到四位 |
 
-**MCQ 按 benchmark 使用各自官方解析器，不再使用统一格式启发式。**PersonaMem-v2 官方解析不接受独立 `A`，接受 `The answer is A`；SMMBench 官方允许包含匹配；Persona-MME 按第一个右括号前的末字符判断。保留这些行为，包括官方对多选式表达的宽松之处，不另外添加“唯一答案”规则。Persona-MME 对官方会抛 IndexError 的畸形输出记 invalid_prediction=0。
+**评分入口先适配统一 bundle 的完整标签，再调用各 benchmark 原有的官方解析器。**原始 PersonaMem-v2 解析函数不接受独立 `A`，但接受 `Final Answer: A`；适配只发生在调用它之前。SMMBench 官方允许包含匹配，Persona-MME 按第一个右括号前的末字符判断。这些解析行为保持不变，包括官方对部分多选式表达的宽松之处。Persona-MME 对官方会抛 IndexError 的畸形输出记 invalid_prediction=0。
 
-converter 的 MCQ 回答格式与上述解析器配套：SMMBench 保持原选项顺序，展示 `(A)`～`(D)` 并要求返回标签，原始数字答案保存在评分专用的 `answer.native_label`；PersonaMem-v2 保持原字母标签和选项顺序，使用官方先推理、再输出 `Final Answer: [Letter]` 的指令。工具规划题和开放题的回答格式不受此调整影响。
+converter 保留原来的统一输入：SMMBench 展示数字选项，PersonaMem-v2 展示字母选项，均要求返回标签。评分适配只去除标签外侧空白并检查它是否属于当前题目的选项；PersonaMem-v2 的单个 ASCII 字母忽略大小写。SMMBench 按标签本身代表的原始编号映射，不按 `choices` 列表当前位置映射；PersonaMem-v2 使用当前题目打乱后的标签。映射不读取标准答案，不改变选项内容或顺序。
 
-旧 SMMBench 数字选项 bundle、旧 PersonaMem-v2 只返回标签的 bundle 需要重新转换，并用新的预测文件重新回答 MCQ。仅重新评分不能修复旧输入协议，也不能通过改写旧预测标签提高分数。这次调整只改变题目输入，不改变记忆内容。
+已符合原生格式的回答及其余文本原样交给官方解析器；适配层不从解释文字或多选表达中猜标签，例如 `0 or 1` 不会被转换成 `(A)`。转换仅存在于评分调用中，不写回 bundle 或 predictions。旧数字/字母标签预测可以直接重评分，无需为本次格式适配重新转换数据或调用回答模型；已有原生格式预测也仍可评分。通用 QA Judge、工具计划和开放题评分不受此适配影响。
+
+协议 2.1 表示“Graphmemix 回答格式适配 + 官方评分规则”，不是将原始响应直接交给官方运行器，也不代表完整复现官方生成协议。脚本每次重新计算，旧 2.0 分数应重评后按新协议报告；本次没有增加外部官方运行器的导出或调用功能。
 
 方法标记为失败（metadata.status=error 或 error_type 非空）时记 method_error、所有指标为零，残留答案不参与计分。这是框架的运行失败统计约定。正常空响应保留官方边界：例如 M³Exam 空响应对空参考的 EM 可能为 1。
 
@@ -56,7 +58,7 @@ converter 的 MCQ 回答格式与上述解析器配套：SMMBench 保持原选�
 
 ## 扩大验证（官方入口对照）
 
-历史协议 1.2 的扩大核查（包含现已移除的 F1、BLEU-1）：`tmp/native-scoring-audit/full/verify.py` 与 `verification.json`。覆盖现有 34,749 条题目记录的构造回答、60 条已有真实预测、全部 108 道 SMMBench 工具题及实际官方默认参数；记录官方源码与本地实现 SHA256。单题与汇总分别核查。该记录是合并文件及裁剪指标之前的验证结果，不能直接当作当前协议 2.0 的测试记录；不包含 PersonaMem-v2 开放回答评分、任何 LLM Judge 或方法生成协议的完整复现。
+历史协议 1.2 的扩大核查（包含现已移除的 F1、BLEU-1）：`tmp/native-scoring-audit/full/verify.py` 与 `verification.json`。覆盖现有 34,749 条题目记录的构造回答、60 条已有真实预测、全部 108 道 SMMBench 工具题及实际官方默认参数；记录官方源码与本地实现 SHA256。单题与汇总分别核查。该记录是合并文件及裁剪指标之前的验证结果，不能直接当作当前脚本协议的测试记录；不包含 PersonaMem-v2 开放回答评分、任何 LLM Judge 或方法生成协议的完整复现。
 
 ## 统一 benchmark 评分入口
 
@@ -88,7 +90,7 @@ mmmb judge data/unified/m3exam runs/m3exam/predictions.jsonl \
 | M³Exam mr、tr、ms、ss、th、ii | 官方基线五档 Judge，0 / 0.25 / 0.5 / 0.75 / 1 |
 | MobileMem-Omni | 官方公开 prompt 适配，CORRECT / WRONG；请求与 JSON 解析为本仓库实现，官方 llm_judge.py 未发布 |
 
-此组合协议版本为 `mmmb-benchmark-dispatch-2.0`。M³Exam 使用固定官方快照的提示词、请求参数、五档解析和均值规则；Omni 使用官方公开提示词、参考答案选择及汇总规则，但不能声称缺失的请求/解析实现完全等价。版本 1.0 使用的通用 QA Judge 缓存不会被新协议复用。每题只分配一个评分器，不再额外对 M³Exam 其他题型计算 EM。独立脚本入口仍允许单独计算这些题型的 EM。
+此组合协议版本为 `mmmb-benchmark-dispatch-2.1`，脚本路由包含上述标签适配。M³Exam 使用固定官方快照的提示词、请求参数、五档解析和均值规则；Omni 使用官方公开提示词、参考答案选择及汇总规则，但不能声称缺失的请求/解析实现完全等价。版本 1.0 使用的通用 QA Judge 缓存不会被新协议复用；本次 2.1 调整不改变各专用 LLM Judge 的协议或缓存。每题只分配一个评分器，不再额外对 M³Exam 其他题型计算 EM。独立脚本入口仍允许单独计算这些题型的 EM。
 
 - 默认要求所有 bundle 问题都有预测；小样本使用 `--question-ids ids.txt`。`--max-items N` 按 bundle 问题顺序（有 allowlist 时按列表顺序）取前 N 题，并明确标记子集。
 - 所有选中题目、标准答案和模型需求先检查，再开始 API 调用或写结果。未知 benchmark、未知题型、重复 ID 和缺预测明确报错，不自动退回通用 Judge。

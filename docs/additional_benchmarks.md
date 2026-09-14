@@ -161,7 +161,7 @@ Reader 使用其现有密钥环境变量（通常是 `OPENAI_API_KEY`），上�
 
 | 记录 | 本次处理 |
 |---|---|
-| 原有 MCQ | 保留原 ID、subset、选项和答案；回答指令对齐官方 `Final Answer: [Letter]` 格式 |
+| 原有 MCQ | 保留原 ID、subset、选项和答案，继续要求只返回选项标签；格式适配由原生评分入口处理 |
 | 新开放题 | ID 为配对 MCQ ID 加 `:generative`；subset 为 `multimodal_32k_generative` 或 `multimodal_128k_generative` |
 | 历史、图片、证据 | 与配对 MCQ 共用 context、memory、asset 和 evidence，不复制记忆；片段证据仍是本地匹配推导，非官方标准检索证据 |
 | 提问与回答格式 | prompt 与配对 MCQ 相同，去除 choices，instruction 为空，response_type 为 text |
@@ -199,7 +199,7 @@ mmmb judge data/unified/personamem_v2 generative_predictions.jsonl \
   --question-ids generative_32k_ids.txt --concurrency 4
 ```
 
-需要重新转换 bundle，以包含开放题 `metadata.native_user_query`：它原样保存追加回忆指令之前的题目。缺字段时明确报错，不从 Reader prompt 猜测恢复。旧 MCQ 的只返回标签指令也需要通过重新转换更新，并使用新预测文件重新作答。原始问题、偏好等评估侧 metadata 不传给 method。
+新增开放题需要重新转换 bundle，以包含 `metadata.native_user_query`：它原样保存追加回忆指令之前的题目。缺字段时明确报错，不从 Reader prompt 猜测恢复。已有 MCQ 的裸标签预测可直接通过原生评分入口适配并重评分，无需为标签格式重新转换或生成预测。原始问题、偏好等评估侧 metadata 不传给 method。
 
 `judgments.jsonl` 保存 `score`、`judge_response`、`preference_kind`、协议及输入哈希，不产生 `correct`。汇总报告 `mean_score_valid_only`、`mean_score_conservative`，以及按历史长度和偏好正负向分组的均分，不称为 Accuracy，也不把两个长度当作独立语义题混报。
 

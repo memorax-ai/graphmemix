@@ -155,12 +155,11 @@ def convert(raw_root: Path, output_root: Path, *, overwrite=False):
                     choices(
                         q,
                         {
-                            f"({chr(65 + i)})": as_text(x)
+                            str(i): as_text(x)
                             for i, x in enumerate(mcq["multi_choice_QA_options"])
                         },
-                        f"({chr(65 + int(mcq['multi_choice_QA_answer']))})",
+                        str(mcq["multi_choice_QA_answer"]),
                     )
-                    q["answer"]["native_label"] = str(mcq["multi_choice_QA_answer"])
                 gold, misleading = {}, {}
                 for field, refs in native.get("evidence_assignment", {}).items():
                     target = misleading if field.startswith("mis_") else gold

@@ -186,19 +186,19 @@ class AdditionalConverters(unittest.TestCase):
                     continue
                 public = _resolved_question(reader, item)
                 task = build_answer_task(public).text
-                self.assertIn("Final Answer: [Letter]", task)
-                self.assertNotIn("Return its label.", task)
+                self.assertIn("Return its label.", task)
+                self.assertNotIn("Final Answer:", task)
                 self.assertNotIn("answer", public)
                 self.assertNotIn("metadata", public)
                 self.assertNotIn("DO_NOT_INJECT", task)
                 label = next(c["choice_id"] for c in public["choices"] if c["text"] == "Blue")
                 self.assertEqual(
-                    score_question("personamem_v2", item, f"Final Answer: {label}")[0],
+                    score_question("personamem_v2", item, label)[0],
                     {"choice_accuracy": 1.0},
                 )
                 wrong = next(c["choice_id"] for c in public["choices"] if c["text"] != "Blue")
                 self.assertEqual(
-                    score_question("personamem_v2", item, f"Final Answer: {wrong}")[0],
+                    score_question("personamem_v2", item, wrong)[0],
                     {"choice_accuracy": 0.0},
                 )
         by_id = {q["question_id"]: q for q in qs}
@@ -279,7 +279,7 @@ class AdditionalConverters(unittest.TestCase):
         self.assertEqual(
             q["misleading_evidence"][0]["memory_id"], memories[1]["memory_id"]
         )
-        self.assertEqual(q["answer"]["choice_id"], "(B)")
+        self.assertEqual(q["answer"]["choice_id"], "1")
         self.assertEqual(q["answer"]["native_label"], "1")
 
     def test_smm_mcq_public_labels_roundtrip_to_native_scoring(self):
@@ -311,7 +311,7 @@ class AdditionalConverters(unittest.TestCase):
                 self.assertIn("Return its label.", task)
                 self.assertEqual(
                     [c["choice_id"] for c in public["choices"]],
-                    ["(A)", "(B)", "(C)", "(D)"],
+                    ["0", "1", "2", "3"],
                 )
                 self.assertEqual([c["text"] for c in public["choices"]], options)
                 self.assertEqual(item["answer"]["native_label"], str(i))

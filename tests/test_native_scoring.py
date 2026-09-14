@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import pytest
 from mm_memory_bench.evaluation.native import score_question, score_predictions
+from mm_memory_bench.evaluation.native import script_judge
 from mm_memory_bench.evaluation.native.script_judge import plan_score, text_em, image_em
 
 
@@ -10,7 +11,7 @@ def q(benchmark='smmbench'):
                 answer={'choice_id':'0','text':'yes'}, choices=[{'choice_id':'0','text':'yes'},{'choice_id':'1','text':'no'}])
 
 
-@pytest.mark.parametrize('response,expected', [('A',1),('(A)',1),('Answer: (A)',1),('B',0),('yes',0),('Answer: (A) or (B)',1),('0',0),('',0)])
+@pytest.mark.parametrize('response,expected', [('A',1),('(A)',1),('Answer: (A)',1),('B',0),('yes',0),('Answer: (A) or (B)',1),('0',1),('',0)])
 def test_choice(response, expected):
     assert score_question('smmbench', q(), response)[0]['choice_accuracy'] == expected
 
@@ -119,14 +120,73 @@ def test_persona_mme_native_parser(response, expected):
 
 
 @pytest.mark.parametrize('response,expected', [
-    ('A',0), ('(A)',0), ('A.',1), ('The answer is A',1),
+    ('A',1), ('(A)',0), ('A.',1), ('The answer is A',1),
     ('Final answer: A',1), ('Answer: A. Final answer: B',0),
     ('Answer: A or B',1), ('',0)])
-def test_personamem_v2_native_parser(response,expected):
+def test_personamem_v2_scoring_adapter(response,expected):
     item=q('personamem_v2')
     item['choices']=[{'choice_id':'A','text':'yes'},{'choice_id':'B','text':'no'}]
     item['answer']={'choice_id':'A','text':'yes'}
     assert score_question('personamem_v2',item,response)[0]['choice_accuracy']==expected
+
+
+def test_official_parsers_still_reject_bundle_only_labels():
+    assert not script_judge.check_answer_match_multiple_choice('(A)', '0')
+    assert script_judge._personamem_v2_extract_final_answer('A') == ''
+
+
+@pytest.mark.parametrize('gold', range(4))
+def test_smm_labels_score_by_id_not_choice_order(gold):
+    item = q()
+    item['choices'] = [{'choice_id': str(i), 'text': f'option {i}'} for i in (2, 0, 3, 1)]
+    item['answer'] = {'choice_id': str(gold), 'native_label': str(gold), 'text': f'option {gold}'}
+    for predicted in range(4):
+        response = f' \n{predicted}\t'
+        assert script_judge.adapt_choice_prediction('smmbench', item['choices'], response) == f'({chr(65 + predicted)})'
+        assert script_judge.choice_score(item, response) == (float(predicted == gold), 'ok')
+
+
+@pytest.mark.parametrize('gold', ['A', 'B'])
+def test_personamem_label_adaptation_is_independent_of_gold(gold):
+    item = q('personamem_v2')
+    item['choices'] = [{'choice_id': 'B', 'text': 'second'}, {'choice_id': 'A', 'text': 'first'}]
+    item['answer'] = {'choice_id': gold, 'text': 'first' if gold == 'A' else 'second'}
+    for predicted in ('A', 'B'):
+        response = f' {predicted.lower()}\n'
+        assert script_judge.adapt_choice_prediction('personamem_v2', item['choices'], response) == f'Final Answer: {predicted}'
+        assert score_question('personamem_v2', item, response)[0] == {'choice_accuracy': float(predicted == gold)}
+
+
+@pytest.mark.parametrize('benchmark,labels,responses', [
+    ('smmbench', ['0', '1'], ['2', '4', '-1', '00', '0 or 1', 'Answer is 0', '0.', '(A)', 'Answer: (A) or (B)', '']),
+    ('smmbench', ['(A)', '(B)'], ['0', '(A)']),
+    ('personamem_v2', ['A', 'B'], ['C', '0', '(A)', 'A or B', 'A.', 'Final Answer: A', 'Answer: A or B', 'ａ', '']),
+    ('persona_mme', ['A', '0'], ['A', '0', ' (a) ']),
+    ('m3exam', ['A', '0'], ['A', '0']),
+])
+def test_adapter_preserves_nonlabels_and_other_benchmarks(benchmark, labels, responses):
+    choices = [{'choice_id': label, 'text': label} for label in labels]
+    for response in responses:
+        assert script_judge.adapt_choice_prediction(benchmark, choices, response) == response
+
+
+@pytest.mark.parametrize('benchmark,label', [('smmbench', '0'), ('personamem_v2', 'A')])
+def test_adapted_scoring_preserves_raw_input_files(tmp_path, benchmark, label):
+    item = q(benchmark)
+    if benchmark == 'personamem_v2':
+        item['choices'] = [{'choice_id': 'A', 'text': 'yes'}, {'choice_id': 'B', 'text': 'no'}]
+        item['answer'] = {'choice_id': 'A', 'text': 'yes'}
+    questions = tmp_path/'questions.jsonl'
+    questions.write_text(json.dumps(item)+'\n')
+    predictions = tmp_path/'predictions.jsonl'
+    predictions.write_text(json.dumps({'question_id': item['question_id'], 'prediction': f' {label}\n'})+'\n')
+    before = {path: path.read_bytes() for path in (questions, predictions)}
+    output = tmp_path/'scores.jsonl'
+    summary = score_predictions(tmp_path, predictions, output, benchmark=benchmark)
+    assert summary['total']['metrics']['choice_accuracy']['mean'] == 1
+    assert summary['protocol'] == 'mmmb-native-scripts-2.1'
+    assert json.loads(output.read_text())['protocol'] == summary['protocol']
+    assert {path: path.read_bytes() for path in before} == before
 
 
 @pytest.mark.parametrize('metadata', [{'status':'error'}, {'error_type':'TimeoutError'}])
