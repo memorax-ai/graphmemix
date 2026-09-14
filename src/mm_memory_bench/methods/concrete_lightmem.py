@@ -14,6 +14,7 @@ from ..preprocessing.captions import CAPTION_PROMPT, caption_cache_key, load_cac
 from .backends import AnswerModel, OpenAICompatibleQwenVL, data_url
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
 from .concrete_memguide import public_captions
+from .answer_input import build_answer_task
 from .media import question_text, uniformly_sample_video
 
 
@@ -608,12 +609,14 @@ class ConcreteLightMemMethod(BaseMemoryMethod):
         rendered = "\n\n".join(
             f"Evidence {index}:\n{value}" for index, value in enumerate(evidence, 1)
         ) or "No relevant memory was retrieved."
+        task = build_answer_task(question)
         prompt = (
-            f"{question.get('instruction', '')}\nQuestion: {query}\n\n"
+            f"{task.text}\n\n"
             "Answer using only the retrieved LightMem evidence.\n\n" + rendered
         )
         prediction = self.answer_model.complete(
-            [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+            [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
+            tools=task.api_tools,
         )
         ids = list(
             dict.fromkeys(

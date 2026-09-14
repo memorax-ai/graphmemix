@@ -24,6 +24,7 @@ from .backends import (
 )
 from .base import GenerationConfig
 from .base import MethodResult
+from .answer_input import build_answer_task
 from .media import question_text, text_from_parts, uniformly_sample_video
 from .universalrag import UNIVERSALRAG_CORPORA, UniversalRAGMethod
 from .vector_index import FaissFlatIPIndex, VectorIndex
@@ -828,11 +829,7 @@ class ConcreteUniversalRAGMethod(UniversalRAGMethod):
         ]
 
     def generate_answer(self, question, evidence):
-        tools = question.get("tools")
-        tools_text = ""
-        if tools and question.get("tool_mode") == "plan":
-            tools_text = "\nCandidate tools:\n" + json.dumps(tools, ensure_ascii=False)
-            tools = None
+        task = build_answer_task(question)
         grounding = (
             "Use only the following retrieved evidence."
             if evidence
@@ -841,7 +838,7 @@ class ConcreteUniversalRAGMethod(UniversalRAGMethod):
         content: list[dict[str, Any]] = [{
             "type": "text",
             "text": (
-                f"{question.get('instruction', '')}\nQuestion: {question_text(question)}{tools_text}\n"
+                f"{task.text}\n"
                 f"{grounding}"
             ),
         }]
@@ -865,7 +862,7 @@ class ConcreteUniversalRAGMethod(UniversalRAGMethod):
             elif unit.get("video"):
                 for frame in uniformly_sample_video(str(unit["video"]), self.video_frames):
                     content.append({"type": "image_url", "image_url": {"url": frame}})
-        return self.answer_model.complete([{"role": "user", "content": content}], tools=tools)
+        return self.answer_model.complete([{"role": "user", "content": content}], tools=task.api_tools)
 
     def _state_path(self) -> Path | None:
         if self.checkpoint_dir is None:

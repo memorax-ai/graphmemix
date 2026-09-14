@@ -19,6 +19,7 @@ from .backends import (
     data_url,
 )
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
+from .answer_input import build_answer_task
 from .media import question_text, uniformly_sample_video
 from .vector_index import FaissFlatIPIndex, VectorIndex
 
@@ -452,7 +453,7 @@ class ConcreteMemGuideMethod(BaseMemoryMethod):
             candidates = [self.units[int(row)] for row in rows[0]]
             evidence = self._missing_information_filter(query, candidates)
 
-        prediction = self._generate_answer(question, query, evidence)
+        prediction = self._generate_answer(question, evidence)
         return MethodResult(
             prediction=prediction,
             diagnostics={
@@ -464,24 +465,20 @@ class ConcreteMemGuideMethod(BaseMemoryMethod):
     def _generate_answer(
         self,
         question: Mapping[str, Any],
-        query: str,
         evidence: Sequence[Mapping[str, Any]],
     ) -> str:
         rendered = "\n\n".join(
             f"Evidence {rank} (memory_id={unit['memory_id']}):\n{unit['text']}"
             for rank, unit in enumerate(evidence[: self.generation.top_k], 1)
         ) or "No relevant memory was retrieved."
-        tools = question.get("tools") if question.get("tool_mode") != "plan" else None
-        plan_tools = ""
-        if question.get("tools") and question.get("tool_mode") == "plan":
-            plan_tools = "\nCandidate tools:\n" + json.dumps(question["tools"], ensure_ascii=False)
+        task = build_answer_task(question)
         prompt = (
-            f"{question.get('instruction', '')}\nQuestion: {query}{plan_tools}\n\n"
+            f"{task.text}\n\n"
             "Answer using only the selected memory evidence.\n\n" + rendered
         )
         return self.answer_model.complete(
             [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
-            tools=tools,
+            tools=task.api_tools,
         )
 
     def answer_many(
@@ -511,7 +508,7 @@ class ConcreteMemGuideMethod(BaseMemoryMethod):
         with ThreadPoolExecutor(max_workers=workers) as pool:
             predictions = list(pool.map(
                 lambda values: self._generate_answer(*values),
-                zip(questions, queries, evidence_groups),
+                zip(questions, evidence_groups),
             ))
         return [
             {

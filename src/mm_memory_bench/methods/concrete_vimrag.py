@@ -14,7 +14,8 @@ import numpy as np
 
 from .backends import AnswerModel, MultiModalEmbedder, OpenAICompatibleQwenVL
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
-from .media import question_text, text_from_parts
+from .answer_input import build_answer_task
+from .media import text_from_parts
 from .vector_index import FaissFlatIPIndex, VectorIndex
 
 
@@ -487,6 +488,7 @@ class ConcreteVimRAGMethod(BaseMemoryMethod):
         return media
 
     def _answer(self, question: Mapping[str, Any]) -> MethodResult:
+        task = build_answer_task(question, supports_api_tools=False, question_first=True)
         self._flush_pending()
         agent = self.agent_factory(
             official_repo=self.official_repo,
@@ -499,10 +501,14 @@ class ConcreteVimRAGMethod(BaseMemoryMethod):
             max_steps=self.max_steps,
             video_frames=self.video_frames,
         )
-        query = question_text(question)
-        instruction = str(question.get("instruction", "")).strip()
-        if instruction:
-            query = f"{query}\n\nAnswer requirements: {instruction}"
+        query = task.text
+        if task.is_tool_plan:
+            query += (
+                "\n\nThe candidate tools above are planning data, not executable VimRAG actions. "
+                "Use the normal VimRAG actions to retrieve evidence. To finish, use "
+                "add_answer_node and put the required JSON plan in its answer field "
+                "as a JSON-encoded string. Return the plan, not a prose answer to the question."
+            )
         sample = {"query": query}
         errors: list[str] = []
         answer = None
@@ -513,7 +519,12 @@ class ConcreteVimRAGMethod(BaseMemoryMethod):
         try:
             for event in events:
                 if event.get("event") == "answer":
-                    answer = str(event.get("content", ""))
+                    content = event.get("content", "")
+                    answer = (
+                        json.dumps(content, ensure_ascii=False)
+                        if task.is_tool_plan and isinstance(content, (list, dict))
+                        else str(content)
+                    )
                     completed_sample = event.get("sample", {})
                     break
                 if event.get("event") != "error":
