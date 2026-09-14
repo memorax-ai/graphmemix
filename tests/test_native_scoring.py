@@ -76,6 +76,38 @@ def test_empty_prediction_not_dropped(tmp_path):
     assert result['total']['statuses']=={'empty_prediction':1}
     assert result['total']['metrics']['choice_accuracy']['mean']==0
 
+
+@pytest.mark.parametrize('collision', ['summary_input', 'summary_questions', 'output_alias', 'manifest', 'table'])
+def test_output_collisions_leave_inputs_and_outputs_unchanged(tmp_path, collision):
+    bundle = tmp_path/'bundle'
+    bundle.mkdir()
+    questions = bundle/'questions.jsonl'
+    questions.write_text(json.dumps(q())+'\n')
+    pred = tmp_path/('scores.summary.json' if collision == 'summary_input' else 'pred.jsonl')
+    pred.write_text(json.dumps({'question_id':'smmbench:q','prediction':'(A)'})+'\n')
+    output = tmp_path/'scores.jsonl'
+    summary = output.with_suffix('.summary.json')
+    protected = [questions, pred]
+    if collision == 'summary_questions':
+        summary.symlink_to(questions)
+    elif collision == 'output_alias':
+        output.write_text('previous scores\n')
+        summary.symlink_to(output)
+        protected.append(output)
+    elif collision in {'manifest', 'table'}:
+        manifest = bundle/'manifest.json'
+        table = bundle/'custom-memories.jsonl'
+        manifest.write_text(json.dumps({'tables': {'memories': table.name}}))
+        table.write_text('previous memories\n')
+        summary.symlink_to(manifest if collision == 'manifest' else table)
+        protected.extend([manifest, table])
+    before = {path: path.read_bytes() for path in protected}
+    with pytest.raises(ValueError, match='collide|overwrite'):
+        score_predictions(bundle, pred, output, benchmark='smmbench')
+    assert {path: path.read_bytes() for path in protected} == before
+    if collision != 'output_alias':
+        assert not output.exists()
+
 @pytest.mark.parametrize('response,expected', [
     ('(d): Fallen leaves', 1), ('(d)', 1), ('D', 1),
     ('(a): Berry bushes', 0), ('', 0), (')', 0)])

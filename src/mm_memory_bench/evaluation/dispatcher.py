@@ -91,8 +91,8 @@ def score_benchmark(bundle, predictions, output, *, model=None,
     if llm_routes and not model:
         raise ValueError("--model is required for selected LLM tasks")
 
-    # Each invocation uses its requested LLM filename and a sibling script filename.
-    paths = {route: (output.parent / "native_scores.jsonl" if route == "script" else output)
+    # Derive script filenames from the requested output so separate runs stay separate.
+    paths = {route: (output.with_name(f"{output.stem}.native{output.suffix}") if route == "script" else output)
              for route in groups}
     if len(llm_routes) > 1:
         for route in llm_routes:

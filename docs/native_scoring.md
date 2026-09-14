@@ -27,11 +27,13 @@ PYTHONPATH=src python scripts/score_script.py smmbench \
 
 **MCQ 按 benchmark 使用各自官方解析器，不再使用统一格式启发式。**PersonaMem-v2 官方解析不接受独立 `A`，接受 `The answer is A`；SMMBench 官方允许包含匹配；Persona-MME 按第一个右括号前的末字符判断。保留这些行为，包括官方对多选式表达的宽松之处，不另外添加“唯一答案”规则。Persona-MME 对官方会抛 IndexError 的畸形输出记 invalid_prediction=0。
 
-既有 converter 的回答格式要求、选项顺序不因此改变。SMMBench 当前旧 bundle 的数字选项与官方字母选项存在输入协议差异：评分保留官方入口的序号到字母映射，因此旧预测若只返回数字将不被算为正确，不能通过改写预测提高分数。尤其 PersonaMem-v2 bundle 要求只返回标签，与官方解析器不接受独立字母之间仍有输入协议差异：重评分忠实执行官方规则，但完整复现需另行对齐回答指令并重新生成预测。
+converter 的 MCQ 回答格式与上述解析器配套：SMMBench 保持原选项顺序，展示 `(A)`～`(D)` 并要求返回标签，原始数字答案保存在评分专用的 `answer.native_label`；PersonaMem-v2 保持原字母标签和选项顺序，使用官方先推理、再输出 `Final Answer: [Letter]` 的指令。工具规划题和开放题的回答格式不受此调整影响。
+
+旧 SMMBench 数字选项 bundle、旧 PersonaMem-v2 只返回标签的 bundle 需要重新转换，并用新的预测文件重新回答 MCQ。仅重新评分不能修复旧输入协议，也不能通过改写旧预测标签提高分数。这次调整只改变题目输入，不改变记忆内容。
 
 方法标记为失败（metadata.status=error 或 error_type 非空）时记 method_error、所有指标为零，残留答案不参与计分。这是框架的运行失败统计约定。正常空响应保留官方边界：例如 M³Exam 空响应对空参考的 EM 可能为 1。
 
-评分参考字段只供评分器读取，不进入回答模型。invalid_prediction 是模型输出格式问题，不等于评分脚本故障；无效标准数据直接报错。
+评分参考字段只供评分器读取，不进入回答模型。invalid_prediction 是模型输出格式问题，不等于评分脚本故障；无效标准数据直接报错。独立脚本在写入前同时检查主输出及派生 summary 的路径，拒绝覆盖预测、题目、manifest 或声明的数据表，也拒绝两个输出指向同一文件。
 
 ## 代码组织与原入口
 
@@ -90,7 +92,7 @@ mmmb judge data/unified/m3exam runs/m3exam/predictions.jsonl \
 
 - 默认要求所有 bundle 问题都有预测；小样本使用 `--question-ids ids.txt`。`--max-items N` 按 bundle 问题顺序（有 allowlist 时按列表顺序）取前 N 题，并明确标记子集。
 - 所有选中题目、标准答案和模型需求先检查，再开始 API 调用或写结果。未知 benchmark、未知题型、重复 ID 和缺预测明确报错，不自动退回通用 Judge。
-- 脚本输出位于 `--output` 同目录的 `native_scores.jsonl` 及其 summary；LLM 输出使用 `--output` 和相应 summary。只有脚本题时不生成 LLM 结果文件。
+- 脚本输出在 `--output` 的扩展名前加 `.native`：例如指定 `method_a.judgments.jsonl`，生成 `method_a.judgments.native.jsonl` 和 `method_a.judgments.native.summary.json`。不同输出文件名拥有独立的脚本结果；LLM 输出使用 `--output` 和相应 summary。只有脚本题时不生成 LLM 结果文件。独立 `score_script.py` 仍直接使用其 `--output` 路径。
 - 额外生成 `<output-stem>.dispatch.summary.json`，记录协议、各路分配数、完成数、方法失败数、评分状态及各自汇总；不把 EM、QA 准确率与偏好分混成总分。每次运行建议使用独立结果目录，避免其他任务的旧结果混淆。
 - LLM 复用既有模型、协议、题目及预测哈希的续跑检查；`--no-resume` 强制重评。脚本每次重新计算，不调用模型。
 - 原 `--scoring-protocol qa` 和 `personamem_v2_open` 行为保留，仍要求 `--model`。也可显式选择 `m3exam` 或 `mobilemem_omni` 专用协议；M³Exam 直接调用需用 `--question-ids` 排除 fj/fm。benchmark 模式仅在分配到 LLM 题目时要求模型配置；密钥通过指定环境变量读取，也可使用无需认证的本地端点。

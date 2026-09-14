@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -73,7 +74,7 @@ def test_script_only_cli_needs_no_model_or_api(tmp_path, monkeypatch):
                  "--scoring-protocol", "benchmark"]) == 0
     factory.assert_not_called()
     assert not out.exists()
-    rows = [json.loads(l) for l in (out.parent / "native_scores.jsonl").read_text().splitlines()]
+    rows = [json.loads(l) for l in (out.parent / "judgments.native.jsonl").read_text().splitlines()]
     assert rows[0]["metrics"] == {"choice_accuracy": 1}
 
 
@@ -90,6 +91,35 @@ def test_m3_mixed_routes_and_resume(tmp_path, clients):
     assert len(clients["m3exam"].calls) == 1
     dispatch.score_benchmark(b, p, out, model="fixture", resume=False)
     assert len(clients["m3exam"].calls) == 2
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_distinct_outputs_keep_each_runs_script_results(tmp_path, clients, mixed):
+    benchmark = "m3exam" if mixed else "smmbench"
+    qs = [question(benchmark, "script", kind="fj"), question(benchmark, "llm")] if mixed else [mcq(benchmark)]
+    b, first_predictions, first_output = bundle_files(tmp_path, benchmark, qs)
+    first = dispatch.score_benchmark(b, first_predictions, first_output, model="fixture")
+    first_script = Path(first["routes"]["script"]["output"])
+    saved_records = first_script.read_bytes()
+    saved_summary = first_script.with_suffix(".summary.json").read_bytes()
+    assert first["routes"]["script"]["summary"]["total"]["metrics"][
+        "em" if mixed else "choice_accuracy"
+    ]["mean"] == 1
+
+    second_predictions = tmp_path / "second_predictions.jsonl"
+    second_predictions.write_text(''.join(
+        json.dumps({"question_id": q["question_id"], "prediction": "wrong"}) + '\n'
+        for q in qs
+    ))
+    second_output = first_output.with_name("second.judgments.jsonl")
+    second = dispatch.score_benchmark(b, second_predictions, second_output, model="fixture")
+    assert first_script.read_bytes() == saved_records
+    assert first_script.with_suffix(".summary.json").read_bytes() == saved_summary
+    assert second["routes"]["script"]["output"] != str(first_script)
+    assert first_script == first_output.parent / "judgments.native.jsonl"
+    assert second["routes"]["script"]["summary"]["total"]["metrics"][
+        "em" if mixed else "choice_accuracy"
+    ]["mean"] == 0
 
 
 def test_persona_mixed_keeps_preference_summary(tmp_path, clients):
@@ -152,8 +182,11 @@ def test_explicit_subset_max_items_and_in_memory_selection(tmp_path, clients):
 
 def test_output_collision_and_old_qa_requires_model(tmp_path, clients):
     b, p, out = bundle_files(tmp_path, "M3Exam", [question("m3exam", "q", kind="fj"), question("m3exam", "llm")])
+    colliding_predictions = tmp_path / "judgments.native.summary.json"
+    colliding_predictions.write_bytes(p.read_bytes())
     with pytest.raises(ValueError, match="collide"):
-        dispatch.score_benchmark(b, p, out.parent / "native_scores.jsonl", model="fixture")
+        dispatch.score_benchmark(b, colliding_predictions, tmp_path / "judgments.jsonl", model="fixture")
+    assert colliding_predictions.read_bytes() == p.read_bytes()
     with pytest.raises(ValueError, match="collide"):
         dispatch.score_benchmark(b, p, p, model="fixture")
     assert not clients

@@ -296,9 +296,18 @@ def score_predictions(bundle, predictions, output, *, benchmark, question_ids=No
                    scope='all' if question_ids is None else 'explicit_subset',
                    total=summarize(rows), groups=groups)
     output = Path(output)
-    if output.resolve() in (predictions_path.resolve(), (Path(bundle)/'questions.jsonl').resolve()):
-        raise ValueError('output must not overwrite input')
+    summary_path = output.with_suffix('.summary.json')
+    destinations = [output.resolve(), summary_path.resolve()]
+    manifest_path = Path(bundle)/'manifest.json'
+    protected = {predictions_path.resolve(), (Path(bundle)/'questions.jsonl').resolve(),
+                 manifest_path.resolve()}
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text())
+        protected.update((Path(bundle)/name).resolve()
+                         for name in manifest.get('tables', {}).values())
+    if len(set(destinations)) != len(destinations) or set(destinations) & protected:
+        raise ValueError('output paths collide with each other or with inputs')
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(''.join(json.dumps(row, ensure_ascii=False)+'\n' for row in rows))
-    output.with_suffix('.summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2)+'\n')
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2)+'\n')
     return summary
