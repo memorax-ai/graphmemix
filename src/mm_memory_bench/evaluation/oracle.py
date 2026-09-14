@@ -195,7 +195,7 @@ def run_oracle_bundle(
             }
         return _prediction_record(question, prediction, time.perf_counter() - item_started)
 
-    with output_path.open("w", encoding="utf-8") as handle:
+    with reader, output_path.open("w", encoding="utf-8") as handle:
         seen_question_ids: set[str] = set()
         for batch in reader.iter_context_batches(question_ids=question_ids):
             by_id = {str(memory["memory_id"]): memory for memory in batch.memories}

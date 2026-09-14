@@ -21,6 +21,10 @@
 
 转换后的目录继续由原有 `BundleReader`、method adapter、Reader 和 Judge 读取。无需为每个 method 再写一份新 benchmark 格式解析器。但 PDF 输入、工具规划题、特殊原生评分等仍需分别验证下游能力；有 bundle 不等于所有方法已经跑通。
 
+方法和 Oracle 的输入优先使用原始 `speaker`；缺失、为空或为 `null` 时，回退到 `role`。原始 bundle 和 `role` 字段保持不变。只有 `role` 的记录因此会获得可见的发言者标签，已有方法 checkpoint 需要重新构建才能使用这个输入变化。
+
+PDF 默认不预处理。使用 `--pdf-policy native_only` 提取原生文字，或使用 `native_then_ocr` / `ocr_pages` 启用 OCR；`--pdf-page-images N` 额外提供前 N 页的图片。同一 reader 内相同内容的 PDF 复用处理中或已完成的结果，解析串行执行，回答模型仍可并发调用。文字缓存只在本次运行中有效，页图写入 bundle 的 `.pdf_cache`。续跑时保持同一 PDF 策略和页图数量；更换策略需使用新的 checkpoint 和预测输出路径。
+
 ## 本次文件
 
 | 文件 | 做什么；输入 → 输出 |
@@ -45,7 +49,7 @@
 | SMMBench | 一个 cluster 内某个来源流的一条消息；保留说话人、时间与 `source_id`。嵌套 JSON 中的图片也登记资产，保留 `Fig.` 引用标签；描述性原生 caption 留在私有元数据中。 | 一条 cluster 内 QA；保留原生 category/domain。普通题为 MCQ，Function_Call 为结构化调用计划。 | 按 `conversation_name + insert_conversation_turn` 的零基位置定位。干扰证据放 `misleading_evidence`，不算 gold。来源流不擅自切成 session。 |
 | Persona-MME | 原生 session 中的 user 或 assistant 一次发言；按 `<img>` 顺序绑定图片。 | 主选择题，以及原生 alignment 的 chosen/rejected 各一道二选一题；分别分组报告。 | 没有消息级标准证据。本接入为 **history-only**，不额外给原生显式 profile；与使用 profile 先验的官方设置需区分。 |
 | PersonaMem-v2 | 原生历史的一条 role/content 消息，包括原生已有的 system 人物介绍；多模态 base64 图片落为资产。 | benchmark split 的一题在某种历史长度下的版本；mode、length、pref_type 等保留。 | CSV 的画像/偏好/答案不作为额外记忆。相关片段只在唯一、连续、逐条完全匹配时回链；否则不臆造证据 ID；回链结果是本地推导的片段定位，不代表官方定义了检索 Recall 指标。没有原生 session 划分。 |
-| M³Exam | 一次 round 的 user 或 assistant 发言，user 侧保留图片/PDF。 | 一条示例问题；保留原生 type、label 和答案列表。 | supporting round 展开至该轮两方发言；PDF 保留原文件，未宣称 Reader 已支持整篇 PDF。当前仅公开示例，不能称完整测试集。 |
+| M³Exam | 一次 round 的 user 或 assistant 发言，user 侧保留图片/PDF。 | 一条示例问题；保留原生 type、label 和答案列表。 | supporting round 展开至该轮两方发言；PDF 保留原文件，读取内容需要显式启用 PDF 策略。当前仅公开示例，不能称完整测试集。 |
 
 MobileMem-Omni 图片包的根目录是 `uid*/`，下载器将其解压到 `omni/image/`，按 GBK 解码非 UTF-8 文件名；转换器仅把目录中的空格规范为下划线，保留人物文件名中的空格。没有重新生成图片。
 
@@ -138,7 +142,7 @@ Reader 使用其现有密钥环境变量（通常是 `OPENAI_API_KEY`），上�
 - MobileMem 文本版已做 Oracle 和方法小样本；其余五个数据入口也已完成五种方法的小样本执行。诊断使用缩短历史，部分切片按标准证据选取，不能作为正式成绩。
 - 当时的 LightMem 成功运行依赖单独的来源关联修复；仅提交数据转换代码不保证复现该方法的成功结果。运行记录属于当时工作区的验证，不能直接当作隔离后数据适配 MR 的验收。
 - SMMBench 的 LightMem/VimRAG 候选工具传递尚有缺口；工具规划的通用评分不替代原生 FC 指标。
-- M³Exam 仅公开示例，现有方法没有完整的原始 PDF 内容读取路径；文件校验通过不等于模型读取了 PDF。
+- M³Exam 仅公开示例；PDF 策略提供文字和可选页图，扫描页需要 OCR 或页图。文件校验通过不等于模型已读取全部 PDF 内容。
 - Persona-MME 使用 history-only；PersonaMem-v2 四种条件需分别报告。Omni 当前公开题单与论文题单的对应关系尚未确认。
 
 ## 官方来源

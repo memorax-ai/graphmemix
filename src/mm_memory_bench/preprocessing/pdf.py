@@ -3,10 +3,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
+from threading import Lock
 from typing import Any, Mapping
 
 PDF_POLICIES = ("off", "native_only", "native_then_ocr", "ocr_pages")
+# PyMuPDF must not run concurrently, including across separate bundle readers.
+_PDF_EXTRACT_LOCK = Lock()
 
 
 class PDFProcessor:
@@ -19,7 +25,25 @@ class PDFProcessor:
         self.policy = policy
         self.page_images = page_images
         self.cache_dir = cache_dir
-        self._cache: dict[str, dict[str, Any]] = {}
+        self._cache: dict[tuple[str, str, int], Future[dict[str, Any]]] = {}
+        self._lock = Lock()
+        self._executor: ThreadPoolExecutor | None = None
+        self._closed = False
+
+    def close(self) -> None:
+        with self._lock:
+            self._closed = True
+            executor = self._executor
+        if executor is not None:
+            executor.shutdown(wait=True)
+        with self._lock:
+            self._cache.clear()
+
+    def __enter__(self) -> PDFProcessor:
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
 
     def process(self, part: Mapping[str, Any]) -> list[dict[str, Any]]:
         value = dict(part)
@@ -30,9 +54,26 @@ class PDFProcessor:
             return [value]
         # Content addressing prevents stale views when a PDF changes at the same path.
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        if digest not in self._cache:
-            self._cache[digest] = self._extract(path, digest)
-        result = self._cache[digest]
+        key = (digest, self.policy, self.page_images)
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("PDF processor is closed")
+            future = self._cache.get(key)
+            if future is None:
+                if self._executor is None:
+                    self._executor = ThreadPoolExecutor(
+                        max_workers=1, thread_name_prefix="pdf-preprocess"
+                    )
+                future = self._executor.submit(self._run_extract, path, digest)
+                self._cache[key] = future
+        try:
+            result = future.result()
+        except BaseException:
+            # Existing waiters observe this failure; a later call may retry it.
+            with self._lock:
+                if self._cache.get(key) is future:
+                    del self._cache[key]
+            raise
         text = "\n\n".join(
             f"[PDF {path.name}; page {page['page']}]\n{page['text']}"
             for page in result["pages"] if page["text"]
@@ -51,6 +92,10 @@ class PDFProcessor:
              "source_asset_id": value.get("asset_id"), "source_pdf": str(path)}
             for i, image in enumerate(result["images"], 1)
         ]]
+
+    def _run_extract(self, path: Path, digest: str) -> dict[str, Any]:
+        with _PDF_EXTRACT_LOCK:
+            return self._extract(path, digest)
 
     def _extract(self, path: Path, digest: str) -> dict[str, Any]:
         try:
@@ -81,7 +126,15 @@ class PDFProcessor:
                     target = self.cache_dir / digest / f"page-{i + 1}-144dpi.png"
                     target.parent.mkdir(parents=True, exist_ok=True)
                     if not target.exists():
-                        page.get_pixmap(dpi=144, alpha=False).save(target)
+                        with tempfile.NamedTemporaryFile(
+                            suffix=".png", dir=target.parent, delete=False
+                        ) as handle:
+                            temporary = Path(handle.name)
+                        try:
+                            page.get_pixmap(dpi=144, alpha=False).save(temporary)
+                            os.replace(temporary, target)
+                        finally:
+                            temporary.unlink(missing_ok=True)
                     images.append(str(target.resolve()))
         return {"pages": pages, "images": images}
 

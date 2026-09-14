@@ -74,12 +74,17 @@ class LightMemBackend(Protocol):
 
     def rollback_batch(self, batch_id: str) -> None: ...
 
+    def close(self) -> None: ...
+
 
 class _OfficialLightMemBackend:
     def __init__(self, memory: Any) -> None:
         self.memory = memory
         self._sources: dict[str, dict[str, Any]] = {}
         original_insert = memory.embedding_retriever.insert
+        self._original_insert = original_insert
+        self._had_insert_override = "insert" in vars(memory.embedding_retriever)
+        self._closed = False
 
         def insert_with_provenance(*, vectors, payloads, ids):
             enriched = []
@@ -94,7 +99,29 @@ class _OfficialLightMemBackend:
             # Embeddings were already computed from the unmodified fact text.
             return original_insert(vectors=vectors, payloads=enriched, ids=ids)
 
+        self._insert_wrapper = insert_with_provenance
         memory.embedding_retriever.insert = insert_with_provenance
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        retriever = self.memory.embedding_retriever
+        try:
+            if retriever.insert is self._insert_wrapper:
+                if self._had_insert_override:
+                    retriever.insert = self._original_insert
+                else:
+                    # Restore class-method lookup instead of leaving a bound
+                    # method on its own instance (another reference cycle).
+                    del retriever.insert
+        finally:
+            # The wrapper captures this backend. Drop both installed and owned
+            # references before closing so even a client error leaves no cycle.
+            self._insert_wrapper = None
+            self._original_insert = None
+            self._sources.clear()
+            retriever.client.close()
+            self._closed = True
 
     def add_memory(self, messages, **kwargs):
         forwarded = []
@@ -669,12 +696,28 @@ class ConcreteLightMemMethod(BaseMemoryMethod):
         )
 
     def _end_context(self) -> None:
-        self._flush_pending()
-        self._save_state()
-        self.backend = None
+        try:
+            self._flush_pending()
+            self._save_state()
+        except BaseException as primary_error:
+            try:
+                self._close_backend()
+            except BaseException as cleanup_error:
+                if hasattr(primary_error, "add_note"):
+                    primary_error.add_note(
+                        "LightMem cleanup also failed: "
+                        f"{type(cleanup_error).__name__}: {cleanup_error}"
+                    )
+            raise
+        else:
+            self._close_backend()
+
+    def _close_backend(self) -> None:
+        backend, self.backend = self.backend, None
         self._pending = []
+        if backend is not None:
+            backend.close()
 
     def _abort_context(self) -> None:
         # Do not retry a failed LightMem batch during exception cleanup.
-        self.backend = None
-        self._pending = []
+        self._close_backend()

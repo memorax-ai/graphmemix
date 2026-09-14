@@ -168,6 +168,8 @@ def _resolved_memory(
         "round_id",
     }
     value = {key: item for key, item in memory.items() if key in allowed}
+    if not value.get("speaker") and value.get("role"):
+        value["speaker"] = value["role"]
     if memory_view not in {"raw", "derived", "raw_derived"}:
         raise ValueError(f"unsupported memory view: {memory_view}")
     raw_content = _safe_content(reader, list(memory["content"]))
@@ -538,7 +540,7 @@ def run_bundle(
     started = time.perf_counter()
     timings: dict[str, float] = defaultdict(float)
     mode = "a" if resume_predictions else "w"
-    with output_path.open(mode, encoding="utf-8") as handle:
+    with reader, output_path.open(mode, encoding="utf-8") as handle:
         def write_prediction(prediction):
             nonlocal count
             handle.write(json.dumps(prediction, ensure_ascii=False) + "\n")
@@ -623,54 +625,55 @@ def digest_bundle(
     memory_ingest_calls = 0
     context_reports: list[dict[str, Any]] = []
 
-    for batch in reader.iter_context_batches(
-        subset=subset,
-        split=split,
-        task_subcategory=task_subcategory,
-    ):
-        selected_memories = [
-            memory
-            for memory in batch.memories
-            if requested_memory_ids is None
-            or str(memory["memory_id"]) in requested_memory_ids
-        ]
-        if not selected_memories:
-            continue
-        context_started = time.perf_counter()
-        method.begin_context(_visible_context(batch.context))
-        try:
-            for memory in sorted(selected_memories, key=lambda row: row["sequence"]):
-                method.ingest(
-                    _resolved_memory(reader, memory, memory_view=memory_view)
-                )
-                observed_memory_ids.add(str(memory["memory_id"]))
-                memory_ingest_calls += 1
-            barrier = getattr(method, "synchronize_memory", None)
-            if callable(barrier):
-                barrier()
-        except BaseException as error:
-            cleanup = getattr(method, "abort_context", None)
-            if not callable(cleanup):
-                cleanup = method.end_context
+    with reader:
+        for batch in reader.iter_context_batches(
+            subset=subset,
+            split=split,
+            task_subcategory=task_subcategory,
+        ):
+            selected_memories = [
+                memory
+                for memory in batch.memories
+                if requested_memory_ids is None
+                or str(memory["memory_id"]) in requested_memory_ids
+            ]
+            if not selected_memories:
+                continue
+            context_started = time.perf_counter()
+            method.begin_context(_visible_context(batch.context))
             try:
-                cleanup()
-            except BaseException as cleanup_error:
-                error.add_note(
-                    "digest cleanup also failed: "
-                    f"{type(cleanup_error).__name__}: {cleanup_error}"
-                )
-            raise
-        else:
-            method.end_context()
-        context_elapsed = time.perf_counter() - context_started
-        digest_seconds += context_elapsed
-        context_reports.append(
-            {
-                "context_id": str(batch.context["context_id"]),
-                "memories": len(selected_memories),
-                "digest_seconds": context_elapsed,
-            }
-        )
+                for memory in sorted(selected_memories, key=lambda row: row["sequence"]):
+                    method.ingest(
+                        _resolved_memory(reader, memory, memory_view=memory_view)
+                    )
+                    observed_memory_ids.add(str(memory["memory_id"]))
+                    memory_ingest_calls += 1
+                barrier = getattr(method, "synchronize_memory", None)
+                if callable(barrier):
+                    barrier()
+            except BaseException as error:
+                cleanup = getattr(method, "abort_context", None)
+                if not callable(cleanup):
+                    cleanup = method.end_context
+                try:
+                    cleanup()
+                except BaseException as cleanup_error:
+                    error.add_note(
+                        "digest cleanup also failed: "
+                        f"{type(cleanup_error).__name__}: {cleanup_error}"
+                    )
+                raise
+            else:
+                method.end_context()
+            context_elapsed = time.perf_counter() - context_started
+            digest_seconds += context_elapsed
+            context_reports.append(
+                {
+                    "context_id": str(batch.context["context_id"]),
+                    "memories": len(selected_memories),
+                    "digest_seconds": context_elapsed,
+                }
+            )
 
     if requested_memory_ids is not None:
         missing = requested_memory_ids - observed_memory_ids

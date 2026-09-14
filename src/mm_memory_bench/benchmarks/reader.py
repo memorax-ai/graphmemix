@@ -67,6 +67,15 @@ class BundleReader:
                     )
                 self.asset_captions[asset_id] = caption
 
+    def close(self) -> None:
+        self.pdf_processor.close()
+
+    def __enter__(self) -> BundleReader:
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
+
     def captions_for_content(self, content: list[dict[str, Any]]) -> list[str]:
         """Return sidecar captions in content order for referenced media assets."""
         return [
