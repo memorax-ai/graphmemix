@@ -11,6 +11,10 @@ from threading import Lock
 from typing import Any, Mapping
 
 PDF_POLICIES = ("off", "native_only", "native_then_ocr", "ocr_pages")
+# Defaults from M³Exam's extract_pdf_pages_for_eval.
+_NATIVE_MAX_PAGES = 100
+_OCR_FALLBACK_MAX_PAGES = 15
+_MIN_NATIVE_CHARS = 400
 # PyMuPDF must not run concurrently, including across separate bundle readers.
 _PDF_EXTRACT_LOCK = Lock()
 
@@ -104,38 +108,46 @@ class PDFProcessor:
             raise RuntimeError('PDF processing requires pip install -e ".[pdf]"') from exc
         pages, images = [], []
         with fitz.open(path) as doc:
-            for i, page in enumerate(doc):
-                native = page.get_text("text").strip()
-                ocr = self.policy == "ocr_pages" or (self.policy == "native_then_ocr" and len(native) < 400)
-                if ocr:
+            text_page_count = min(len(doc), _NATIVE_MAX_PAGES)
+            if self.policy != "ocr_pages":
+                pages = [
+                    {"page": i + 1, "text": doc[i].get_text("text").strip(), "ocr": False}
+                    for i in range(text_page_count)
+                ]
+            fallback = (self.policy == "native_then_ocr"
+                        and sum(len(page["text"]) for page in pages) < _MIN_NATIVE_CHARS)
+            if self.policy == "ocr_pages" or fallback:
+                if fallback:
+                    text_page_count = min(text_page_count, _OCR_FALLBACK_MAX_PAGES)
+                # The official fallback replaces native text, including with empty OCR.
+                pages = []
+                for i in range(text_page_count):
                     try:
                         import pytesseract
                         from PIL import Image
-                        pix = page.get_pixmap(dpi=150, alpha=False, colorspace=fitz.csRGB)
+                        pix = doc[i].get_pixmap(dpi=150, alpha=False, colorspace=fitz.csRGB)
                         recognized = pytesseract.image_to_string(
                             Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
                         ).strip()
-                        if recognized and recognized != native:
-                            native = "\n".join(x for x in (native, recognized) if x)
                     except Exception as exc:
                         raise RuntimeError(f"PDF OCR failed at {path}, page {i + 1}: {exc}") from exc
-                pages.append({"page": i + 1, "text": native, "ocr": ocr})
-                if i < self.page_images:
-                    if self.cache_dir is None:
-                        raise ValueError("PDF page rendering requires a cache directory")
-                    target = self.cache_dir / digest / f"page-{i + 1}-144dpi.png"
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    if not target.exists():
-                        with tempfile.NamedTemporaryFile(
-                            suffix=".png", dir=target.parent, delete=False
-                        ) as handle:
-                            temporary = Path(handle.name)
-                        try:
-                            page.get_pixmap(dpi=144, alpha=False).save(temporary)
-                            os.replace(temporary, target)
-                        finally:
-                            temporary.unlink(missing_ok=True)
-                    images.append(str(target.resolve()))
+                    pages.append({"page": i + 1, "text": recognized, "ocr": True})
+            for i in range(min(len(doc), self.page_images)):
+                if self.cache_dir is None:
+                    raise ValueError("PDF page rendering requires a cache directory")
+                target = self.cache_dir / digest / f"page-{i + 1}-144dpi.png"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if not target.exists():
+                    with tempfile.NamedTemporaryFile(
+                        suffix=".png", dir=target.parent, delete=False
+                    ) as handle:
+                        temporary = Path(handle.name)
+                    try:
+                        doc[i].get_pixmap(dpi=144, alpha=False).save(temporary)
+                        os.replace(temporary, target)
+                    finally:
+                        temporary.unlink(missing_ok=True)
+                images.append(str(target.resolve()))
         return {"pages": pages, "images": images}
 
 
@@ -146,7 +158,7 @@ def check_pdf_checkpoint(checkpoint_dir: Path | None, *, policy: str,
         return
     root = Path(checkpoint_dir)
     marker = root / "pdf-input.json"
-    expected = {"version": 1, "policy": policy, "page_images": page_images}
+    expected = {"version": 2, "policy": policy, "page_images": page_images}
     if marker.exists():
         if json.loads(marker.read_text()) != expected:
             raise ValueError("PDF input policy differs from checkpoint; use a fresh checkpoint directory")

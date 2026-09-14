@@ -116,6 +116,13 @@ def test_old_checkpoint_rejected_for_pdf(tmp_path):
     check_pdf_checkpoint(tmp_path, policy="off", page_images=0)
 
 
+def test_previous_extraction_version_requires_fresh_checkpoint(tmp_path):
+    marker = {"version": 1, "policy": "native_only", "page_images": 0}
+    (tmp_path / "pdf-input.json").write_text(json.dumps(marker))
+    with pytest.raises(ValueError, match="fresh checkpoint"):
+        check_pdf_checkpoint(tmp_path, policy="native_only", page_images=0)
+
+
 def test_pdf_text_reaches_all_five_method_ingestion_paths(processor, pdf):
     from unittest.mock import Mock
     from mm_memory_bench.methods.concrete_amem import ConcreteAMemMethod
