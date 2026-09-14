@@ -78,9 +78,44 @@ class LightMemBackend(Protocol):
 class _OfficialLightMemBackend:
     def __init__(self, memory: Any) -> None:
         self.memory = memory
+        self._sources: dict[str, dict[str, Any]] = {}
+        original_insert = memory.embedding_retriever.insert
+
+        def insert_with_provenance(*, vectors, payloads, ids):
+            enriched = []
+            for payload in payloads:
+                value = dict(payload)
+                source = self._sources.get(str(value.get("speaker_id", "")))
+                if source is not None:
+                    value.update(source)
+                    marker = f"[memory_id={source['source_memory_id']}]"
+                    value["memory"] = marker + "\n" + str(value.get("memory", ""))
+                enriched.append(value)
+            # Embeddings were already computed from the unmodified fact text.
+            return original_insert(vectors=vectors, payloads=enriched, ids=ids)
+
+        memory.embedding_retriever.insert = insert_with_provenance
 
     def add_memory(self, messages, **kwargs):
-        return self.memory.add_memory(messages, **kwargs)
+        forwarded = []
+        for message in messages:
+            value = dict(message)
+            if value.get("canonical_memory_id"):
+                # Upstream propagates speaker_id through segmentation and fact
+                # source_id resolution, but drops arbitrary provenance fields.
+                # Carry an opaque key there; speaker_name (the prompt label)
+                # stays unchanged and insertion restores the real speaker_id.
+                token = "mmmb-source-" + hashlib.sha256(
+                    (str(value["ingest_batch_id"]) + "\0" + str(value["canonical_memory_id"])).encode()
+                ).hexdigest()
+                self._sources[token] = {
+                    "source_memory_id": value["canonical_memory_id"],
+                    "ingest_batch_id": value["ingest_batch_id"],
+                    "speaker_id": value.get("speaker_id", ""),
+                }
+                value["speaker_id"] = token
+            forwarded.append(value)
+        return self.memory.add_memory(forwarded, **kwargs)
 
     def retrieve(self, query: str, limit: int = 10) -> list[str]:
         return self.memory.retrieve(query, limit=limit)
