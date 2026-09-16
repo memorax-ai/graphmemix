@@ -15,7 +15,7 @@ import numpy as np
 from .backends import AnswerModel, MultiModalEmbedder, OpenAICompatibleQwenVL
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
 from .answer_input import build_answer_task
-from .media import text_from_parts
+from .media import text_from_parts, label_retrieved_images
 from .vector_index import FaissFlatIPIndex, VectorIndex
 
 
@@ -101,6 +101,12 @@ def official_vimrag_agent_factory(
         def search(self, queries, top_k=None):
             values = [queries] if isinstance(queries, str) else list(queries)
             return [search(str(query), int(top_k or self.search_top_k)) for query in values]
+
+        def format_search_results(self, search_results, add_vision_ids=False):
+            formatted = super().format_search_results(search_results, add_vision_ids=add_vision_ids)
+            content, vision_ids = formatted if add_vision_ids else (formatted, None)
+            content = label_retrieved_images(content, search_results.get("data", []))
+            return (content, vision_ids) if add_vision_ids else content
 
         def _model_generate(self, messages):
             content = answer_model.complete(messages)
@@ -434,6 +440,7 @@ class ConcreteVimRAGMethod(BaseMemoryMethod):
                         "type": "image",
                         "file_path": str(part["path"]),
                         "image": str(part["path"]),
+                        "media_source_id": part.get("source_id"),
                         **common,
                     }
                 )
@@ -574,7 +581,7 @@ class ConcreteVimRAGMethod(BaseMemoryMethod):
 
     def _checkpoint_config(self) -> dict[str, Any]:
         return {
-            "format": "mmmb-vimrag-checkpoint-1",
+            "format": "mmmb-vimrag-checkpoint-2",
             "embedding_name": self.embedding_name,
             "embedding_dimension": self.embedder.dimension,
         }

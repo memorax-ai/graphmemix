@@ -14,7 +14,7 @@ from ..bundle import (
     stable_id,
     validate_bundle,
 )
-from ._shared import Assets, as_text, choices, locate, question, source_manifest
+from ._shared import Assets, as_text, choices, locate, parsed, question, source_manifest
 
 
 # Official SMMBench evaluation/agents/prompt.py, c52cf9d2b6b800784b097d6c055b0e9d8d105842.
@@ -72,6 +72,9 @@ def function_plan_instruction(tools):
 
 def _parts(value, assets, root):
     """Materialize images embedded in native JSON evidence, not just outer images."""
+    structured = parsed(value)
+    if isinstance(structured, dict) and isinstance(structured.get("table_header"), list) and isinstance(structured.get("table_rows"), list):
+        return [content_text(as_text(structured), format="table")]
     if isinstance(value, list):
         return [part for item in value for part in _parts(item, assets, root)]
     if isinstance(value, dict):

@@ -179,3 +179,19 @@ the official baseline's model, retriever, or evidence organization.
 Existing bundles need reconversion to receive the new instructions. A controlled
 prompt comparison may reuse the same memory index and frozen retrieved evidence,
 but must generate fresh predictions and retain the old artifacts separately.
+
+
+### 媒体与表格输入
+
+- SMMBench JSON 表格保留原文本并增加公共表格格式标记；UniversalRAG 同时识别旧 bundle 的原生 header/rows JSON 结构。
+- M³Exam 每个附件 content part 保留原始 `source_id`；公共图片输入函数将其与图片一起呈现。UniversalRAG 保留同一记忆中的不同图片；同一资产的重复检索仍去重，top-k 保持为证据单元数。
+
+- 无证据时不再声称路由器选择了“不检索”。
+
+媒体与表格单元格式已更新为 UniversalRAG checkpoint v3。旧 checkpoint 会被明确拒绝；请重新转换相关 bundle 并使用新的 checkpoint 目录建库，不能将旧索引视为包含新的表格与图片标识。已有预测仍可直接用于重新评分，无需为修复评分而重跑方法。
+
+### 跨方法媒体输入回归
+
+原始资产标识由 converter 提供；公共媒体函数负责与图片或生成 caption 绑定。A-Mem、MemGuide、LightMem 接入生成 caption 标识，A-Mem 的笔记身份数据额外保留图片编号列表；VimRAG 在官方工具结果格式化后追加编号，不替换其 Picture 标识或搜索工具；Oracle 复用公共图片渲染。
+
+以上覆盖本次原始媒体与生成 caption 路径，不等同于真实模型长期记忆提炼后的正确率保证。新增跨方法测试覆盖表格文本保留、每图标识、无标识媒体兼容和 VimRAG 官方格式化函数。A-Mem 笔记版本、MemGuide/LightMem/VimRAG checkpoint 版本随输入变化更新；后续模型验证需使用新索引目录。

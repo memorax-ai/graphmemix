@@ -31,6 +31,7 @@ from .backends import (
 from .base import GenerationConfig
 from .concrete_memguide import public_captions
 from .answer_input import build_answer_task
+from .media import caption_with_source
 from .media import openai_content_from_parts, question_text, text_from_parts, uniformly_sample_video
 from .vector_index import FaissFlatIPIndex, VectorIndex
 
@@ -270,7 +271,7 @@ class ConcreteAMemMethod(AMemMethod):
             "memory_model": getattr(backend_config, "model", None),
             "memory_base_url": getattr(backend_config, "base_url", None),
             "memory_max_output_tokens": getattr(backend_config, "max_output_tokens", None),
-            "note_prompt_version": 2,
+            "note_prompt_version": 3,
         }
         if self.caption_model is not None:
             caption_config = getattr(self.caption_model, "config", None)
@@ -435,7 +436,7 @@ class ConcreteAMemMethod(AMemMethod):
         cached_descriptions: list[str] = []
         if needs_description and self.caption_model is not None:
             cached_descriptions = [
-                self._caption(part)
+                caption_with_source(part, self._caption(part))
                 for part in parts
                 if part.get("type") in {"image", "video"}
             ]
@@ -446,6 +447,10 @@ class ConcreteAMemMethod(AMemMethod):
             for key in ("memory_id", "source_id", "session_id", "speaker", "timestamp")
             if memory.get(key) is not None
         }
+        media_ids = [part["source_id"] for part in parts
+                     if part.get("type") == "image" and part.get("source_id")]
+        if media_ids:
+            identity["image_source_ids"] = media_ids
         if cached_descriptions:
             visible = [{
                 "type": "text",

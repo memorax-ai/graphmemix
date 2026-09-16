@@ -20,6 +20,7 @@ from .backends import (
 )
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
 from .answer_input import build_answer_task
+from .media import caption_with_source, caption_metadata_with_sources, image_source_inventory
 from .media import question_text, uniformly_sample_video
 from .vector_index import FaissFlatIPIndex, VectorIndex
 
@@ -113,6 +114,7 @@ def public_captions(memory: Mapping[str, Any]) -> list[str]:
     derived = metadata.get("derived", {})
     if not isinstance(derived, Mapping):
         return []
+    derived = caption_metadata_with_sources(memory, derived)
     result: list[str] = []
     for key in (
         "caption",
@@ -251,7 +253,7 @@ class ConcreteMemGuideMethod(BaseMemoryMethod):
 
     def _checkpoint_config(self) -> dict[str, Any]:
         config = {
-            "format": "mmmb-memguide-checkpoint-1",
+            "format": "mmmb-memguide-checkpoint-3",
             "embedding": self._embedding_identity(),
             "embedding_dimension": self.embedder.dimension,
             "video_frames": self.video_frames,
@@ -340,10 +342,13 @@ class ConcreteMemGuideMethod(BaseMemoryMethod):
 
         captions = public_captions(memory)
         if captions:
+            inventory = image_source_inventory(memory)
+            if inventory:
+                parts.append(inventory)
             parts.extend(f"[Dataset caption] {caption}" for caption in captions)
         else:
             for part in media:
-                parts.append(f"[Generated caption] {self._caption(part)}")
+                parts.append(f"[Generated caption] {caption_with_source(part, self._caption(part))}")
 
         header = " ".join(
             f"{key}={memory[key]}"

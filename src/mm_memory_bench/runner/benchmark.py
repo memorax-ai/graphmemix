@@ -8,6 +8,7 @@ from typing import Any, Mapping, Protocol, runtime_checkable
 
 from ..benchmarks.bundle import TOOL_SENSITIVE_KEYS, normalized_tool_key
 from ..benchmarks.reader import BundleReader, ContextBatch
+from ..methods.media import caption_with_source, caption_metadata_with_sources, image_source_inventory
 
 
 @runtime_checkable
@@ -45,6 +46,10 @@ def _safe_content(reader: BundleReader, content: list[dict[str, Any]]) -> list[d
             for key, item in part.items()
             if key in {"type", "text", "asset_id", "path"}
         }
+        # Public media identity is needed by image-ID tasks. Keep the allowlist
+        # narrow: asset provenance and evaluator annotations remain private.
+        if part.get("type") in {"image", "document"} and isinstance(part.get("source_id"), str):
+            value["source_id"] = part["source_id"]
         safe.append(value)
     return safe
 
@@ -85,6 +90,7 @@ def _derived_memory_content(
     derived = metadata.get("derived") if isinstance(metadata, Mapping) else None
     if not isinstance(derived, Mapping):
         derived = {}
+    derived = caption_metadata_with_sources(memory, derived)
     labels = (
         ("Short summary", "short_summary"),
         ("Summary", "summary"),
@@ -108,6 +114,9 @@ def _derived_memory_content(
             for index, caption in enumerate(sidecar_captions, 1)
             if caption
         )
+    inventory = image_source_inventory(memory)
+    if inventory:
+        lines.append(inventory)
     tags = derived.get("tags")
     if isinstance(tags, list) and tags:
         lines.append("Tags: " + ", ".join(str(tag) for tag in tags))
@@ -128,6 +137,7 @@ def _safe_derived_metadata(
     derived = metadata.get("derived") if isinstance(metadata, Mapping) else None
     if not isinstance(derived, Mapping):
         derived = {}
+    derived = caption_metadata_with_sources(memory, derived)
     allowed = {
         "short_summary",
         "summary",
@@ -173,7 +183,12 @@ def _resolved_memory(
     if memory_view not in {"raw", "derived", "raw_derived"}:
         raise ValueError(f"unsupported memory view: {memory_view}")
     raw_content = _safe_content(reader, list(memory["content"]))
-    sidecar_captions = reader.captions_for_content(list(memory["content"]))
+    # Resolve captions per asset, since a sidecar may cover only some images.
+    sidecar_captions = [
+        caption_with_source(part, caption) if part.get("type") == "image" else caption
+        for part in memory["content"]
+        for caption in reader.captions_for_content([part])
+    ]
     derived_content, describes_media = (
         _derived_memory_content(memory, sidecar_captions=sidecar_captions)
         if memory_view == "derived"

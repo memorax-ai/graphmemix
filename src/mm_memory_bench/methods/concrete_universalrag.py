@@ -25,6 +25,7 @@ from .backends import (
 from .base import GenerationConfig
 from .base import MethodResult
 from .answer_input import build_answer_task
+from .media import image_content, table_text
 from .media import question_text, text_from_parts, uniformly_sample_video
 from .universalrag import UNIVERSALRAG_CORPORA, UniversalRAGMethod
 from .vector_index import FaissFlatIPIndex, VectorIndex
@@ -458,16 +459,18 @@ class ConcreteUniversalRAGMethod(UniversalRAGMethod):
             result["document"].append({**base, "text": document_text})
         for part in parts:
             kind = part.get("type")
-            if kind == "table":
-                text = str(part.get("text") or part.get("path") or "")
+            structured_text = table_text(part)
+            if structured_text or kind == "table":
+                text = structured_text or str(part.get("path") or "")
                 if text:
-                    result["table"].append({**base, "text": text})
+                    result["table"].append({**base, "text": "\n".join(v for v in (prefix, text) if v)})
             elif kind == "image":
                 result["image"].append({
                     **base,
                     "text": document_text,
                     "media_auxiliary": media_auxiliary,
                     "image": str(part["path"]),
+                    "media_source_id": part.get("source_id"),
                 })
             elif kind == "video":
                 video = str(part["path"])
@@ -704,7 +707,7 @@ class ConcreteUniversalRAGMethod(UniversalRAGMethod):
         per_corpus: Sequence[Sequence[Mapping[str, Any]]], top_k: int
     ) -> list[dict[str, Any]]:
         evidence: list[dict[str, Any]] = []
-        seen_memories: set[str] = set()
+        seen_units: set[tuple[str, str]] = set()
         cursors = [0] * len(per_corpus)
         while len(evidence) < top_k:
             added = False
@@ -714,7 +717,8 @@ class ConcreteUniversalRAGMethod(UniversalRAGMethod):
                     value = candidates[cursors[corpus_index]]
                     cursors[corpus_index] += 1
                     memory_id = str(value.get("memory_id", ""))
-                    if not memory_id or memory_id not in seen_memories:
+                    identity = (memory_id, str(value.get("image") or value.get("video") or "text"))
+                    if not memory_id or identity not in seen_units:
                         candidate = value
                         break
                 if candidate is None:
@@ -723,7 +727,7 @@ class ConcreteUniversalRAGMethod(UniversalRAGMethod):
                 evidence.append(candidate)
                 added = True
                 if memory_id:
-                    seen_memories.add(memory_id)
+                    seen_units.add((memory_id, str(candidate.get("image") or candidate.get("video") or "text")))
                 if len(evidence) == top_k:
                     return evidence
             if not added:
@@ -833,7 +837,7 @@ class ConcreteUniversalRAGMethod(UniversalRAGMethod):
         grounding = (
             "Use only the following retrieved evidence."
             if evidence
-            else "Answer directly; the router determined that memory retrieval is unnecessary."
+            else "No memory evidence is available in this request."
         )
         content: list[dict[str, Any]] = [{
             "type": "text",
@@ -858,7 +862,7 @@ class ConcreteUniversalRAGMethod(UniversalRAGMethod):
                 })
             if unit.get("image"):
                 image = str(unit["image"])
-                content.append({"type": "image_url", "image_url": {"url": image if image.startswith("data:") else data_url(image)}})
+                content.extend(image_content({"path": image, "source_id": unit.get("media_source_id")}))
             elif unit.get("video"):
                 for frame in uniformly_sample_video(str(unit["video"]), self.video_frames):
                     content.append({"type": "image_url", "image_url": {"url": frame}})
@@ -876,7 +880,7 @@ class ConcreteUniversalRAGMethod(UniversalRAGMethod):
 
     def _checkpoint_config(self) -> dict[str, Any]:
         return {
-            "format": "mmmb-universalrag-checkpoint-2",
+            "format": "mmmb-universalrag-checkpoint-3",
             "router_model": self.router.model,
             "adapter_profile": self.adapter_profile,
             "dimensions": {name: self.embedders[name].dimension for name in UNIVERSALRAG_CORPORA},

@@ -15,6 +15,7 @@ from .backends import AnswerModel, OpenAICompatibleQwenVL, data_url
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
 from .concrete_memguide import public_captions
 from .answer_input import build_answer_task
+from .media import caption_with_source, image_source_inventory
 from .media import question_text, uniformly_sample_video
 
 
@@ -326,6 +327,8 @@ class ConcreteLightMemMethod(BaseMemoryMethod):
         state_path = self._state_path()
         if state_path.is_file():
             state = json.loads(state_path.read_text(encoding="utf-8"))
+            if state.get("format") != "mmmb-lightmem-checkpoint-3":
+                raise RuntimeError("LightMem media inputs changed; use a fresh checkpoint directory")
             if state.get("context_id") != self._context_id:
                 raise RuntimeError("LightMem checkpoint belongs to another context")
             self._processed_memory_ids = {
@@ -353,7 +356,7 @@ class ConcreteLightMemMethod(BaseMemoryMethod):
         temporary.write_text(
             json.dumps(
                 {
-                    "format": "mmmb-lightmem-checkpoint-1",
+                    "format": "mmmb-lightmem-checkpoint-3",
                     "context_id": self._context_id,
                     "processed_memory_ids": sorted(self._processed_memory_ids),
                     "sequence": self._sequence,
@@ -514,9 +517,12 @@ class ConcreteLightMemMethod(BaseMemoryMethod):
                 raise NotImplementedError("LightMem caption track does not transcribe audio")
         captions = public_captions(memory)
         if captions:
+            inventory = image_source_inventory(memory)
+            if inventory:
+                values.append(inventory)
             values.extend(f"[Dataset caption] {caption}" for caption in captions)
         else:
-            values.extend(f"[Generated caption] {self._caption(part)}" for part in media)
+            values.extend(f"[Generated caption] {caption_with_source(part, self._caption(part))}" for part in media)
         identity = " ".join(
             f"{key}={memory[key]}"
             for key in ("session_id", "speaker", "timestamp")

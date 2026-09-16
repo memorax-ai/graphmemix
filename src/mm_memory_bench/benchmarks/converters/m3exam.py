@@ -60,9 +60,10 @@ def convert(raw_root: Path, output_root: Path, *, overwrite=False):
                                 files = turn.get(field, [])
                                 files = [files] if isinstance(files, str) else files
                                 for f in files:
-                                    parts.append(
-                                        assets.add(path.parent / directory / f, kind)
-                                    )
+                                    part = assets.add(path.parent / directory / f, kind)
+                                    # Public asset identity, never derived from question/gold.
+                                    part["source_id"] = Path(f).name
+                                    parts.append(part)
                         w.add_memory(
                             {
                                 "memory_id": mid,
