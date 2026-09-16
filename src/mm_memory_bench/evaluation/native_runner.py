@@ -227,14 +227,18 @@ def judge_predictions(
             **protocol.record_fields(items[question_id]),
         }
         failure = failures[question_id]
+        skip_item = getattr(protocol, "skip_item", lambda item: False)
+        if skip_item(items[question_id]):
+            record.update({"status": "method_error" if failure else "ok",
+                           **protocol.zero(), **(failure or {})})
+            return record
         if failure:
             record.update({"status": "method_error", **protocol.zero(), **failure, "score": 0.0})
             if "label" in record:
                 record.update(label="WRONG", correct=False)
             return record
         empty_is_zero = getattr(protocol, "empty_prediction_is_zero", True)
-        skip_item = getattr(protocol, "skip_item", lambda item: False)
-        if (empty_is_zero and not record["prediction"].strip()) or skip_item(items[question_id]):
+        if empty_is_zero and not record["prediction"].strip():
             record.update({"status": "ok", **protocol.zero()})
             return record
         try:

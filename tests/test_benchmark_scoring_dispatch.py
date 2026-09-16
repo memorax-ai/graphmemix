@@ -175,6 +175,71 @@ def test_omni_failure_retry_and_prediction_change(tmp_path, clients):
     assert len(client.calls) == 3
 
 
+def test_omni_unscorable_method_failure_keeps_denominator_and_reason(tmp_path, clients):
+    correct = question("mobilemem_omni", "correct", kind="single_hop")
+    unscorable = question("mobilemem_omni", "no_reference", kind="single_hop")
+    unscorable["answer"] = {"text": ""}
+    b, p, out = bundle_files(tmp_path, "MobileMem-Omni", [correct, unscorable])
+
+    def score():
+        result = dispatch.score_benchmark(b, p, out, model="fixture")
+        return result["routes"]["mobilemem_omni"]["summary"]
+
+    summary = score()
+    assert summary["judge_protocol"] == "mmmb-omni-published-prompt-1.1"
+    assert summary["overall"]["LLM_JUDGE"] == 1
+    assert summary["skipped_judgments"] == 1
+    assert summary["method_failures"] == 0
+    client = clients["mobilemem_omni"]
+    assert [item["question"] for item in client.calls] == ["correct"]
+
+    predictions = [json.loads(line) for line in p.read_text().splitlines()]
+    predictions[1].update(prediction="", metadata={"method_error": "TimeoutError: timeout"})
+    p.write_text(''.join(json.dumps(row) + '\n' for row in predictions))
+    for _ in range(2):
+        summary = score()
+        assert summary["overall"]["LLM_JUDGE"] == 1
+        assert summary["by_category"]["Single-hop"]["metrics"]["LLM_JUDGE"] == 1
+        assert summary["valid_judgments"] == 1
+        assert summary["skipped_judgments"] == 1
+        assert summary["method_failures"] == 1
+        assert summary["failed_judgments"] == 0
+        rows = dispatch._load(out)
+        failure = rows[unscorable["question_id"]]
+        assert failure["status"] == "method_error"
+        assert failure["error"] == "TimeoutError: timeout"
+        assert failure["label"] is None and failure["score"] is None
+        assert len(client.calls) == 1  # Reuse the correct score; never judge empty gold.
+
+    # A scorable method failure still counts as wrong, without calling the Judge.
+    predictions[0]["metadata"] = {"method_error": "TimeoutError: timeout"}
+    p.write_text(''.join(json.dumps(row) + '\n' for row in predictions))
+    summary = score()
+    assert summary["overall"]["LLM_JUDGE"] == 0
+    assert summary["method_failures"] == 2
+    assert summary["skipped_judgments"] == 1
+    failed = dispatch._load(out)[correct["question_id"]]
+    assert failed["label"] == "WRONG" and failed["score"] == 0
+    assert len(client.calls) == 1
+
+    # Updated successful predictions retry the scorable failure, not the skipped item.
+    for prediction in predictions:
+        prediction.pop("metadata")
+        prediction["prediction"] = "yes"
+    p.write_text(''.join(json.dumps(row) + '\n' for row in predictions))
+    assert score()["overall"]["LLM_JUDGE"] == 1
+    assert len(client.calls) == 2
+
+    # The changed denominator protocol must not reuse judgments from version 1.0.
+    rows = dispatch._load(out)
+    for row in rows.values():
+        row["judge_protocol"] = "mmmb-omni-published-prompt-1.0"
+    rows[correct["question_id"]].update(label="WRONG", score=0)
+    out.write_text(''.join(json.dumps(row) + '\n' for row in rows.values()))
+    assert score()["overall"]["LLM_JUDGE"] == 1
+    assert len(client.calls) == 3
+
+
 @pytest.mark.parametrize("problem", ["missing", "duplicate", "unknown", "bad_task", "bad_gold", "no_model"])
 def test_preflight_no_calls_or_output(tmp_path, monkeypatch, problem):
     qs = [question("m3exam", "llm", kind="mr"), question("m3exam", "script", kind="fj")]

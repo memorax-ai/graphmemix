@@ -15,7 +15,7 @@ from collections import Counter, defaultdict
 from typing import Any
 
 SOURCE_REVISION = "919e0f545722030898cee03b263f08c8092f2ebb"
-PROTOCOL_VERSION = "mmmb-omni-published-prompt-1.0"
+PROTOCOL_VERSION = "mmmb-omni-published-prompt-1.1"
 CATEGORIES = {
     "multi_hop": "Multi-hop", "temporal_reasoning": "Temporal Reasoning",
     "abstention": "Abstention", "single_hop": "Single-hop",
@@ -155,7 +155,7 @@ def summarize(records):
             "valid_judgments": sum(r.get("status") == "ok" and r.get("label") is not None for r in records),
             "failed_judgments": failed,
             "method_failures": sum(r.get("status") == "method_error" for r in records),
-            "skipped_judgments": sum(r.get("status") == "ok" and r.get("label") is None for r in records),
+            "skipped_judgments": sum(r.get("status") in {"ok", "method_error"} and r.get("label") is None for r in records),
             "total_questions": len(records), "overall": {"LLM_JUDGE": metric(records)},
             "by_category": {category: {"count": len(rows), "metrics": {"LLM_JUDGE": metric(rows)}}
                             for category, rows in grouped.items()}}
