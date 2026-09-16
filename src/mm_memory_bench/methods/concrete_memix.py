@@ -18,6 +18,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 from .backends import AnswerModel, MultiModalEmbedder, OpenAICompatibleQwenVL, data_url
+from .answer_input import build_answer_task
 from ..preprocessing.captions import CAPTION_PROMPT, caption_cache_key, load_cached_caption, save_cached_caption
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
 from .media import question_text, uniformly_sample_video
@@ -829,16 +830,13 @@ class ConcreteMemixMethod(BaseMemoryMethod):
                         {"type": "image_url", "image_url": {"url": frame}}
                         for frame in frames
                     )
-        tools = question.get("tools") if question.get("tool_mode") != "plan" else None
-        plan_tools = ""
-        if question.get("tools") and question.get("tool_mode") == "plan":
-            plan_tools = "\nCandidate tools:\n" + json.dumps(question["tools"], ensure_ascii=False)
+        task = build_answer_task(question)
         prompt = (
-            f"{question.get('instruction', '')}\nQuestion: {question_text(question)}{plan_tools}\n\n"
+            f"{task.text}\n\n"
             "Use only the following Memix evidence packet."
         )
         content.extend([{"type": "text", "text": prompt}, *evidence_content])
-        return self.answer_model.complete([{"role": "user", "content": content}], tools=tools)
+        return self.answer_model.complete(task.messages(content), tools=task.api_tools)
 
     def _state_dir(self) -> Path | None:
         return (

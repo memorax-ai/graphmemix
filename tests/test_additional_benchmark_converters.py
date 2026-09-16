@@ -279,7 +279,7 @@ class AdditionalConverters(unittest.TestCase):
         self.assertEqual(
             q["misleading_evidence"][0]["memory_id"], memories[1]["memory_id"]
         )
-        self.assertEqual(q["answer"]["choice_id"], "(B)")
+        self.assertEqual(q["answer"]["choice_id"], "1")
         self.assertEqual(q["answer"]["native_label"], "1")
 
     def test_smm_mcq_public_labels_roundtrip_to_native_scoring(self):
@@ -311,15 +311,20 @@ class AdditionalConverters(unittest.TestCase):
                 self.assertIn("Return its label.", task)
                 self.assertEqual(
                     [c["choice_id"] for c in public["choices"]],
-                    ["(A)", "(B)", "(C)", "(D)"],
+                    ["0", "1", "2", "3"],
                 )
                 self.assertEqual([c["text"] for c in public["choices"]], options)
                 self.assertEqual(item["answer"]["native_label"], str(i))
+                self.assertEqual(item["answer"]["choice_id"], str(i))
                 self.assertNotIn("answer", public)
                 self.assertNotIn("metadata", public)
                 self.assertNotIn("PRIVATE_NATIVE_ANSWER", task)
                 label = public["choices"][i]["choice_id"]
                 self.assertIn(f"{label}: {options[i]}", task)
+                self.assertEqual(
+                    score_question("smmbench", item, label)[0],
+                    {"choice_accuracy": 1.0},
+                )
                 self.assertEqual(
                     score_question("smmbench", item, f"{label}: {options[i]}")[0],
                     {"choice_accuracy": 1.0},

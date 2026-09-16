@@ -5,11 +5,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+from mm_memory_bench.evaluation.oracle import OracleEvidenceGenerator
 from mm_memory_bench.methods.answer_input import build_answer_task
 from mm_memory_bench.methods.base import GenerationConfig
 from mm_memory_bench.methods.concrete_amem import ConcreteAMemMethod
 from mm_memory_bench.methods.concrete_lightmem import ConcreteLightMemMethod
 from mm_memory_bench.methods.concrete_memguide import ConcreteMemGuideMethod
+from mm_memory_bench.methods.concrete_memix import ConcreteMemixMethod
 from mm_memory_bench.methods.concrete_universalrag import ConcreteUniversalRAGMethod
 from mm_memory_bench.methods.concrete_vimrag import ConcreteVimRAGMethod
 from mm_memory_bench.methods.media import question_text
@@ -52,7 +54,78 @@ def make_method(cls):
     return method
 
 
+def answer_with_evidence(cls, q):
+    """Exercise each reader's real message assembly with a captured model call."""
+    memory = {'memory_id': 'm1', 'source_id': 's1',
+              'content': [{'type': 'text', 'text': 'retrieved note'}]}
+    if cls is ConcreteMemixMethod:
+        method = make_method(cls)
+        method._record_by_id = {'m1': memory}
+        method._reader_text = Mock(return_value='retrieved note')
+        method._generate_answer(q, ['m1'])
+        method._reader_text.assert_called_once_with(memory, query=question_text(q))
+    else:
+        method = cls(answer_model=SimpleNamespace(complete=Mock(return_value='[]')))
+        method.answer(q, [memory])
+    return method.answer_model
+
+
 class AnswerInputTest(unittest.TestCase):
+    def test_memix_oracle_keep_system_plan_candidates_once(self):
+        from mm_memory_bench.benchmarks.converters.smmbench import function_plan_instruction
+
+        q = question()
+        q['tools'] = [{'function_name': 'book_train', 'function_comment': 'Book a train.'}]
+        q.update(instruction=function_plan_instruction(q['tools']),
+                 instruction_role='system', instruction_includes_tools=True)
+        original = copy.deepcopy(q)
+        for cls in [ConcreteMemixMethod, OracleEvidenceGenerator]:
+            with self.subTest(reader=cls.__name__):
+                model = answer_with_evidence(cls, q)
+                messages = model.complete.call_args.args[0]
+                self.assertEqual([message['role'] for message in messages], ['system', 'user'])
+                self.assertEqual(messages[0]['content'], q['instruction'])
+                text = request_text(model)
+                self.assertEqual(text.count('Book a train.'), 1)
+                self.assertIn('retrieved note', text)
+                self.assertIn('A: 火车', text)
+                for secret in ['GOLD_SECRET', 'EVIDENCE_SECRET', 'METADATA_SECRET']:
+                    self.assertNotIn(secret, text)
+                self.assertIsNone(model.complete.call_args.kwargs['tools'])
+                self.assertEqual(q, original)
+
+    def test_memix_oracle_preserve_ordinary_and_legacy_plan_messages(self):
+        for cls in [ConcreteMemixMethod, OracleEvidenceGenerator]:
+            for plan in [False, True]:
+                with self.subTest(reader=cls.__name__, plan=plan):
+                    q = question(plan)
+                    model = answer_with_evidence(cls, q)
+                    prefix = q['instruction'] + '\nQuestion: ' + question_text(q)
+                    if plan:
+                        prefix += '\nCandidate tools:\n' + json.dumps(q['tools'], ensure_ascii=False)
+                    if cls is ConcreteMemixMethod:
+                        expected = [
+                            {'type': 'text', 'text': prefix + '\n\nUse only the following Memix evidence packet.'},
+                            {'type': 'text', 'text': 'Evidence 1; memory_id=m1; source_id=s1; modality=unknown:\nretrieved note'},
+                        ]
+                    else:
+                        expected = [
+                            {'type': 'text', 'text': prefix + '\nThe following memories were selected by an oracle. Answer using only these memories. Do not assume that every memory is independently sufficient.'},
+                            {'type': 'text', 'text': 'Oracle memory 1: {"memory_id": "m1", "source_id": "s1"}\nPublic annotations: {}'},
+                            {'type': 'text', 'text': 'retrieved note'},
+                        ]
+                    self.assertEqual(model.complete.call_args.args[0], [{'role': 'user', 'content': expected}])
+                    self.assertIsNone(model.complete.call_args.kwargs['tools'])
+
+    def test_memix_oracle_forward_executable_tools_separately(self):
+        q = question()
+        q.pop('tool_mode')
+        for cls in [ConcreteMemixMethod, OracleEvidenceGenerator]:
+            with self.subTest(reader=cls.__name__):
+                model = answer_with_evidence(cls, q)
+                self.assertEqual(model.complete.call_args.kwargs['tools'], q['tools'])
+                self.assertNotIn('book_train', request_text(model))
+
     def test_plan_is_data_not_api_tools_and_excludes_private_fields(self):
         q = question()
         original = copy.deepcopy(q)

@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from ..benchmarks.reader import BundleReader
+from ..methods.answer_input import build_answer_task
 from ..methods.backends import AnswerModel, ContextWindowExceeded, OpenAICompatibleQwenVL
 from ..methods.base import GenerationConfig
-from ..methods.media import openai_content_from_parts, question_text
+from ..methods.media import openai_content_from_parts
 from ..runner.benchmark import _prediction_record, _resolved_memory, _resolved_question
 
 
@@ -72,16 +73,11 @@ class OracleEvidenceGenerator:
         question: Mapping[str, Any],
         memories: Sequence[Mapping[str, Any]],
     ) -> str:
-        tools = question.get("tools")
-        tools_text = ""
-        if tools and question.get("tool_mode") == "plan":
-            tools_text = "\nCandidate tools:\n" + json.dumps(tools, ensure_ascii=False)
-            tools = None
+        task = build_answer_task(question)
         content: list[dict[str, Any]] = [{
             "type": "text",
             "text": (
-                f"{question.get('instruction', '')}\n"
-                f"Question: {question_text(question)}{tools_text}\n"
+                f"{task.text}\n"
                 "The following memories were selected by an oracle. Answer using only "
                 "these memories. Do not assume that every memory is independently sufficient."
             ),
@@ -112,7 +108,7 @@ class OracleEvidenceGenerator:
                     memory.get("content", []), video_frames=self.video_frames
                 )
             )
-        return self.answer_model.complete([{"role": "user", "content": content}], tools=tools)
+        return self.answer_model.complete(task.messages(content), tools=task.api_tools)
 
 
 def run_oracle_bundle(
