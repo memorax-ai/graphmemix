@@ -14,6 +14,7 @@ from ..preprocessing.captions import CAPTION_PROMPT, caption_cache_key, load_cac
 from .backends import AnswerModel, OpenAICompatibleQwenVL, data_url
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
 from .concrete_memguide import public_captions
+from .answer_input import build_answer_task
 from .media import question_text, uniformly_sample_video
 
 
@@ -73,13 +74,75 @@ class LightMemBackend(Protocol):
 
     def rollback_batch(self, batch_id: str) -> None: ...
 
+    def close(self) -> None: ...
+
 
 class _OfficialLightMemBackend:
     def __init__(self, memory: Any) -> None:
         self.memory = memory
+        self._sources: dict[str, dict[str, Any]] = {}
+        original_insert = memory.embedding_retriever.insert
+        self._original_insert = original_insert
+        self._had_insert_override = "insert" in vars(memory.embedding_retriever)
+        self._closed = False
+
+        def insert_with_provenance(*, vectors, payloads, ids):
+            enriched = []
+            for payload in payloads:
+                value = dict(payload)
+                source = self._sources.get(str(value.get("speaker_id", "")))
+                if source is not None:
+                    value.update(source)
+                    marker = f"[memory_id={source['source_memory_id']}]"
+                    value["memory"] = marker + "\n" + str(value.get("memory", ""))
+                enriched.append(value)
+            # Embeddings were already computed from the unmodified fact text.
+            return original_insert(vectors=vectors, payloads=enriched, ids=ids)
+
+        self._insert_wrapper = insert_with_provenance
+        memory.embedding_retriever.insert = insert_with_provenance
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        retriever = self.memory.embedding_retriever
+        try:
+            if retriever.insert is self._insert_wrapper:
+                if self._had_insert_override:
+                    retriever.insert = self._original_insert
+                else:
+                    # Restore class-method lookup instead of leaving a bound
+                    # method on its own instance (another reference cycle).
+                    del retriever.insert
+        finally:
+            # The wrapper captures this backend. Drop both installed and owned
+            # references before closing so even a client error leaves no cycle.
+            self._insert_wrapper = None
+            self._original_insert = None
+            self._sources.clear()
+            retriever.client.close()
+            self._closed = True
 
     def add_memory(self, messages, **kwargs):
-        return self.memory.add_memory(messages, **kwargs)
+        forwarded = []
+        for message in messages:
+            value = dict(message)
+            if value.get("canonical_memory_id"):
+                # Upstream propagates speaker_id through segmentation and fact
+                # source_id resolution, but drops arbitrary provenance fields.
+                # Carry an opaque key there; speaker_name (the prompt label)
+                # stays unchanged and insertion restores the real speaker_id.
+                token = "mmmb-source-" + hashlib.sha256(
+                    (str(value["ingest_batch_id"]) + "\0" + str(value["canonical_memory_id"])).encode()
+                ).hexdigest()
+                self._sources[token] = {
+                    "source_memory_id": value["canonical_memory_id"],
+                    "ingest_batch_id": value["ingest_batch_id"],
+                    "speaker_id": value.get("speaker_id", ""),
+                }
+                value["speaker_id"] = token
+            forwarded.append(value)
+        return self.memory.add_memory(forwarded, **kwargs)
 
     def retrieve(self, query: str, limit: int = 10) -> list[str]:
         return self.memory.retrieve(query, limit=limit)
@@ -608,12 +671,14 @@ class ConcreteLightMemMethod(BaseMemoryMethod):
         rendered = "\n\n".join(
             f"Evidence {index}:\n{value}" for index, value in enumerate(evidence, 1)
         ) or "No relevant memory was retrieved."
+        task = build_answer_task(question)
         prompt = (
-            f"{question.get('instruction', '')}\nQuestion: {query}\n\n"
+            f"{task.text}\n\n"
             "Answer using only the retrieved LightMem evidence.\n\n" + rendered
         )
         prediction = self.answer_model.complete(
-            [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+            [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
+            tools=task.api_tools,
         )
         ids = list(
             dict.fromkeys(
@@ -631,12 +696,28 @@ class ConcreteLightMemMethod(BaseMemoryMethod):
         )
 
     def _end_context(self) -> None:
-        self._flush_pending()
-        self._save_state()
-        self.backend = None
+        try:
+            self._flush_pending()
+            self._save_state()
+        except BaseException as primary_error:
+            try:
+                self._close_backend()
+            except BaseException as cleanup_error:
+                if hasattr(primary_error, "add_note"):
+                    primary_error.add_note(
+                        "LightMem cleanup also failed: "
+                        f"{type(cleanup_error).__name__}: {cleanup_error}"
+                    )
+            raise
+        else:
+            self._close_backend()
+
+    def _close_backend(self) -> None:
+        backend, self.backend = self.backend, None
         self._pending = []
+        if backend is not None:
+            backend.close()
 
     def _abort_context(self) -> None:
         # Do not retry a failed LightMem batch during exception cleanup.
-        self.backend = None
-        self._pending = []
+        self._close_backend()

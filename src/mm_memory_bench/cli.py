@@ -58,6 +58,8 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         help="benchmark-level asset caption JSONL merged by the harness",
     )
+    run_parser.add_argument("--pdf-policy", choices=["off", "native_only", "native_then_ocr", "ocr_pages"], default="off")
+    run_parser.add_argument("--pdf-page-images", type=int, default=0, help="attach the first N PDF pages as images in addition to extracted text")
     run_parser.add_argument("--memory-max-output-tokens", type=int, default=1000)
     run_parser.add_argument("--memory-workers", type=int, default=1)
     run_parser.add_argument("--checkpoint-dir", type=Path)
@@ -174,6 +176,8 @@ def _parser() -> argparse.ArgumentParser:
     oracle_parser.add_argument(
         "--memory-view", choices=["raw", "derived", "raw_derived"], default="raw_derived"
     )
+    oracle_parser.add_argument("--pdf-policy", choices=["off", "native_only", "native_then_ocr", "ocr_pages"], default="off")
+    oracle_parser.add_argument("--pdf-page-images", type=int, default=0, help="attach the first N PDF pages as images in addition to extracted text")
     oracle_parser.add_argument("--caption-sidecar", type=Path)
     oracle_parser.add_argument(
         "--question-ids",
@@ -470,6 +474,8 @@ def main(argv: list[str] | None = None) -> int:
                     task_subcategory=args.task_subcategory,
                     memory_view=args.memory_view,
                     caption_sidecar=args.caption_sidecar,
+                    pdf_policy=args.pdf_policy,
+                    pdf_page_images=args.pdf_page_images,
                     memory_ids_path=args.memory_ids,
                 )
                 args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -490,6 +496,8 @@ def main(argv: list[str] | None = None) -> int:
                     memory_view=args.memory_view,
                     query_concurrency=args.query_concurrency,
                     caption_sidecar=args.caption_sidecar,
+                    pdf_policy=args.pdf_policy,
+                    pdf_page_images=args.pdf_page_images,
                     resume_predictions=args.resume_predictions,
                     continue_on_query_error=args.continue_on_query_error,
                     question_ids_path=args.question_ids,
@@ -595,6 +603,8 @@ def main(argv: list[str] | None = None) -> int:
                 memory_view=args.memory_view,
                 concurrency=args.concurrency,
                 caption_sidecar=args.caption_sidecar,
+                pdf_policy=args.pdf_policy,
+                pdf_page_images=args.pdf_page_images,
                 question_ids_path=args.question_ids,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))

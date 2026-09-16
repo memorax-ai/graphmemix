@@ -16,6 +16,7 @@ Source = "https://github.com/ligeng0197/graphmemix"
 Mirror = "https://gitee.com/oking9/graph-memix"
 
 [project.optional-dependencies]
+pdf = ["PyMuPDF>=1.24", "pillow>=10", "pytesseract>=0.3.10"]
 methods = [
   "faiss-cpu>=1.8",
   "numpy>=1.26",

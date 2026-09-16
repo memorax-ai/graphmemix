@@ -124,12 +124,15 @@ def run_oracle_bundle(
     memory_view: str = "raw_derived",
     concurrency: int = 8,
     caption_sidecar: Path | None = None,
+    pdf_policy: str = "off",
+    pdf_page_images: int = 0,
     question_ids_path: Path | None = None,
 ) -> dict[str, Any]:
     """Run the gold-evidence upper bound while preserving harness visibility rules."""
     if concurrency <= 0:
         raise ValueError("oracle concurrency must be positive")
-    reader = BundleReader(bundle_root, caption_sidecar=caption_sidecar)
+    reader = BundleReader(bundle_root, caption_sidecar=caption_sidecar,
+                          pdf_policy=pdf_policy, pdf_page_images=pdf_page_images)
     generator = OracleEvidenceGenerator(generation, answer_model=answer_model)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
@@ -192,7 +195,7 @@ def run_oracle_bundle(
             }
         return _prediction_record(question, prediction, time.perf_counter() - item_started)
 
-    with output_path.open("w", encoding="utf-8") as handle:
+    with reader, output_path.open("w", encoding="utf-8") as handle:
         seen_question_ids: set[str] = set()
         for batch in reader.iter_context_batches(question_ids=question_ids):
             by_id = {str(memory["memory_id"]): memory for memory in batch.memories}
@@ -231,6 +234,8 @@ def run_oracle_bundle(
         "errors": errors,
         "concurrency": concurrency,
         "memory_view": memory_view,
+        "pdf_policy": pdf_policy,
+        "pdf_page_images": pdf_page_images,
         "question_ids": str(question_ids_path) if question_ids_path else None,
         "elapsed_seconds": elapsed,
     }

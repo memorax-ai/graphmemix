@@ -30,6 +30,7 @@ from .backends import (
 )
 from .base import GenerationConfig
 from .concrete_memguide import public_captions
+from .answer_input import build_answer_task
 from .media import openai_content_from_parts, question_text, text_from_parts, uniformly_sample_video
 from .vector_index import FaissFlatIPIndex, VectorIndex
 
@@ -645,17 +646,12 @@ class ConcreteAMemMethod(AMemMethod):
 
     def generate_answer(self, question, notes):
         evidence = "\n\n".join(json.dumps(note, ensure_ascii=False) for note in notes)
-        instruction = str(question.get("instruction", ""))
-        tools = question.get("tools")
-        tools_text = ""
-        if tools and question.get("tool_mode") == "plan":
-            tools_text = "\nCandidate tools:\n" + json.dumps(tools, ensure_ascii=False)
-            tools = None
+        task = build_answer_task(question)
         messages = [
             {"role": "system", "content": "Answer only from retrieved memory evidence."},
             {
                 "role": "user",
-                "content": f"{instruction}\nQuestion: {question_text(question)}{tools_text}\nEvidence:\n{evidence}",
+                "content": f"{task.text}\nEvidence:\n{evidence}",
             },
         ]
-        return self.answer_model.complete(messages, tools=tools)
+        return self.answer_model.complete(messages, tools=task.api_tools)

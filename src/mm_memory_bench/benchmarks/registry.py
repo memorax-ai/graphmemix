@@ -6,6 +6,13 @@ from typing import Any, Callable
 
 
 CONVERTERS = {
+    "mobilemem_omni": "mm_memory_bench.benchmarks.converters.mobilemem_omni:convert",
+    "smmbench": "mm_memory_bench.benchmarks.converters.smmbench:convert",
+    "persona_mme": "mm_memory_bench.benchmarks.converters.persona_mme:convert",
+    "personamem_v2": "mm_memory_bench.benchmarks.converters.personamem_v2:convert",
+    "m3exam": "mm_memory_bench.benchmarks.converters.m3exam:convert",
+
+    "mobilemem": "mm_memory_bench.benchmarks.converters.mobilemem:convert",
     "atm_bench": "mm_memory_bench.benchmarks.converters.atm:convert",
     "mem_gallery": "mm_memory_bench.benchmarks.converters.mem_gallery:convert",
     "memeye": "mm_memory_bench.benchmarks.converters.memeye:convert",

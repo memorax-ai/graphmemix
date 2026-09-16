@@ -168,6 +168,8 @@ def _resolved_memory(
         "round_id",
     }
     value = {key: item for key, item in memory.items() if key in allowed}
+    if not value.get("speaker") and value.get("role"):
+        value["speaker"] = value["role"]
     if memory_view not in {"raw", "derived", "raw_derived"}:
         raise ValueError(f"unsupported memory view: {memory_view}")
     raw_content = _safe_content(reader, list(memory["content"]))
@@ -492,11 +494,17 @@ def run_bundle(
     memory_view: str = "raw",
     query_concurrency: int = 1,
     caption_sidecar: Path | None = None,
+    pdf_policy: str = "off",
+    pdf_page_images: int = 0,
     resume_predictions: bool = False,
     continue_on_query_error: bool = False,
     question_ids_path: Path | None = None,
 ) -> dict[str, Any]:
-    reader = BundleReader(bundle_root, caption_sidecar=caption_sidecar)
+    reader = BundleReader(bundle_root, caption_sidecar=caption_sidecar,
+                          pdf_policy=pdf_policy, pdf_page_images=pdf_page_images)
+    from ..preprocessing.pdf import check_pdf_checkpoint
+    check_pdf_checkpoint(getattr(method, "checkpoint_dir", None),
+                         policy=pdf_policy, page_images=pdf_page_images)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     completed_question_ids: set[str] = set()
     initial_count = 0
@@ -532,7 +540,7 @@ def run_bundle(
     started = time.perf_counter()
     timings: dict[str, float] = defaultdict(float)
     mode = "a" if resume_predictions else "w"
-    with output_path.open(mode, encoding="utf-8") as handle:
+    with reader, output_path.open(mode, encoding="utf-8") as handle:
         def write_prediction(prediction):
             nonlocal count
             handle.write(json.dumps(prediction, ensure_ascii=False) + "\n")
@@ -566,6 +574,8 @@ def run_bundle(
         "resumed_predictions": initial_count,
         "new_predictions": count - initial_count,
         "task_subcategory": task_subcategory,
+        "pdf_policy": pdf_policy,
+        "pdf_page_images": pdf_page_images,
         "memory_ingest_calls": int(timings["ingest_calls"]),
         "digest_seconds": digest_seconds,
         "answer_seconds": answer_seconds,
@@ -583,6 +593,8 @@ def digest_bundle(
     task_subcategory: str | None = None,
     memory_view: str = "raw",
     caption_sidecar: Path | None = None,
+    pdf_policy: str = "off",
+    pdf_page_images: int = 0,
     memory_ids_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build every selected context without exposing evaluation questions.
@@ -593,7 +605,11 @@ def digest_bundle(
     a cold measurement must provide a new, empty method checkpoint directory.
     """
 
-    reader = BundleReader(bundle_root, caption_sidecar=caption_sidecar)
+    reader = BundleReader(bundle_root, caption_sidecar=caption_sidecar,
+                          pdf_policy=pdf_policy, pdf_page_images=pdf_page_images)
+    from ..preprocessing.pdf import check_pdf_checkpoint
+    check_pdf_checkpoint(getattr(method, "checkpoint_dir", None),
+                         policy=pdf_policy, page_images=pdf_page_images)
     requested_memory_ids: set[str] | None = None
     if memory_ids_path is not None:
         requested_memory_ids = {
@@ -609,54 +625,55 @@ def digest_bundle(
     memory_ingest_calls = 0
     context_reports: list[dict[str, Any]] = []
 
-    for batch in reader.iter_context_batches(
-        subset=subset,
-        split=split,
-        task_subcategory=task_subcategory,
-    ):
-        selected_memories = [
-            memory
-            for memory in batch.memories
-            if requested_memory_ids is None
-            or str(memory["memory_id"]) in requested_memory_ids
-        ]
-        if not selected_memories:
-            continue
-        context_started = time.perf_counter()
-        method.begin_context(_visible_context(batch.context))
-        try:
-            for memory in sorted(selected_memories, key=lambda row: row["sequence"]):
-                method.ingest(
-                    _resolved_memory(reader, memory, memory_view=memory_view)
-                )
-                observed_memory_ids.add(str(memory["memory_id"]))
-                memory_ingest_calls += 1
-            barrier = getattr(method, "synchronize_memory", None)
-            if callable(barrier):
-                barrier()
-        except BaseException as error:
-            cleanup = getattr(method, "abort_context", None)
-            if not callable(cleanup):
-                cleanup = method.end_context
+    with reader:
+        for batch in reader.iter_context_batches(
+            subset=subset,
+            split=split,
+            task_subcategory=task_subcategory,
+        ):
+            selected_memories = [
+                memory
+                for memory in batch.memories
+                if requested_memory_ids is None
+                or str(memory["memory_id"]) in requested_memory_ids
+            ]
+            if not selected_memories:
+                continue
+            context_started = time.perf_counter()
+            method.begin_context(_visible_context(batch.context))
             try:
-                cleanup()
-            except BaseException as cleanup_error:
-                error.add_note(
-                    "digest cleanup also failed: "
-                    f"{type(cleanup_error).__name__}: {cleanup_error}"
-                )
-            raise
-        else:
-            method.end_context()
-        context_elapsed = time.perf_counter() - context_started
-        digest_seconds += context_elapsed
-        context_reports.append(
-            {
-                "context_id": str(batch.context["context_id"]),
-                "memories": len(selected_memories),
-                "digest_seconds": context_elapsed,
-            }
-        )
+                for memory in sorted(selected_memories, key=lambda row: row["sequence"]):
+                    method.ingest(
+                        _resolved_memory(reader, memory, memory_view=memory_view)
+                    )
+                    observed_memory_ids.add(str(memory["memory_id"]))
+                    memory_ingest_calls += 1
+                barrier = getattr(method, "synchronize_memory", None)
+                if callable(barrier):
+                    barrier()
+            except BaseException as error:
+                cleanup = getattr(method, "abort_context", None)
+                if not callable(cleanup):
+                    cleanup = method.end_context
+                try:
+                    cleanup()
+                except BaseException as cleanup_error:
+                    error.add_note(
+                        "digest cleanup also failed: "
+                        f"{type(cleanup_error).__name__}: {cleanup_error}"
+                    )
+                raise
+            else:
+                method.end_context()
+            context_elapsed = time.perf_counter() - context_started
+            digest_seconds += context_elapsed
+            context_reports.append(
+                {
+                    "context_id": str(batch.context["context_id"]),
+                    "memories": len(selected_memories),
+                    "digest_seconds": context_elapsed,
+                }
+            )
 
     if requested_memory_ids is not None:
         missing = requested_memory_ids - observed_memory_ids
@@ -672,6 +689,8 @@ def digest_bundle(
         "subset": subset,
         "split": split,
         "task_subcategory": task_subcategory,
+        "pdf_policy": pdf_policy,
+        "pdf_page_images": pdf_page_images,
         "memory_view": memory_view,
         "memory_ids": str(memory_ids_path) if memory_ids_path else None,
         "contexts": len(context_reports),
