@@ -20,7 +20,7 @@ from .backends import (
 )
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
 from .answer_input import build_answer_task
-from .media import caption_with_source, caption_metadata_with_sources, image_source_inventory
+from ..preprocessing.captions import caption_with_source, image_source_inventory, public_captions
 from .media import question_text, uniformly_sample_video
 from .vector_index import FaissFlatIPIndex, VectorIndex
 
@@ -85,50 +85,6 @@ class NVEmbedV2TextEmbedder:
     def encode_queries(self, texts: Sequence[str]) -> np.ndarray:
         prefix = f"Instruct: {self.query_instruction}\nQuery: "
         return self._encode(texts, prefix)
-
-
-def _strings(value: Any) -> list[str]:
-    if isinstance(value, str) and value.strip():
-        return [value.strip()]
-    if isinstance(value, list):
-        result: list[str] = []
-        for item in value:
-            if isinstance(item, Mapping):
-                result.extend(_strings(item.get("text", item.get("caption", ""))))
-            else:
-                result.extend(_strings(item))
-        return result
-    if isinstance(value, Mapping):
-        for key in ("final_text", "full_text", "text", "caption", "description"):
-            result = _strings(value.get(key))
-            if result:
-                return result
-    return []
-
-
-def public_captions(memory: Mapping[str, Any]) -> list[str]:
-    """Read only captions carried by the canonical public benchmark record."""
-    metadata = memory.get("metadata")
-    if not isinstance(metadata, Mapping):
-        return []
-    derived = metadata.get("derived", {})
-    if not isinstance(derived, Mapping):
-        return []
-    derived = caption_metadata_with_sources(memory, derived)
-    result: list[str] = []
-    for key in (
-        "caption",
-        "short_caption",
-        "image_caption",
-        "image_captions",
-        "video_caption",
-        "video_captions",
-        "blip_caption",
-        "blip_captions",
-    ):
-        result.extend(_strings(derived.get(key)))
-    # Stable de-duplication preserves the benchmark-provided ordering.
-    return list(dict.fromkeys(result))
 
 
 class ConcreteMemGuideMethod(BaseMemoryMethod):

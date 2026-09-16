@@ -1,4 +1,8 @@
 import json
+from pathlib import Path
+import subprocess
+import sys
+import textwrap
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -57,6 +61,90 @@ def test_structured_table_enters_real_table_corpus():
     units=m._memory_units({'memory_id':'m','source_id':'stream','content':[{'type':'text','text':text}]})
     assert 'Championship' in units['table'][0]['text']
     assert units['document']  # Existing document coverage is retained.
+
+
+def test_runner_preserves_only_table_format_before_universalrag_ingest(tmp_path):
+    from mm_memory_bench.benchmarks.reader import BundleReader, ContextBatch
+    from mm_memory_bench.runner.benchmark import run_context
+
+    (tmp_path / "manifest.json").write_text("{}")
+    (tmp_path / "assets.jsonl").write_text("")
+    table = json.dumps({"table_header": ["Division"], "table_rows": [["Championship"]]})
+    contents = [
+        _parts(table, None, None)[0],
+        {"type": "text", "text": table},  # Previously converted bundle.
+        {"type": "text", "text": "Year | Division\n2020 | Championship",
+         "annotations": {"format": "table"}},  # Explicit marker needs no JSON inference.
+        {"type": "text", "text": "Look at Table. 12345678",
+         "annotations": {"format": "text"}},
+    ]
+    for part in contents:
+        part.setdefault("annotations", {})["private_answer"] = "SECRET"
+    memories = [dict(memory_id=f"m{i}", context_id="c", sequence=i, content=[part])
+                for i, part in enumerate(contents)]
+    received, units = [], []
+    ur = method()
+
+    class Probe:
+        def begin_context(self, context): pass
+        def ingest(self, memory):
+            received.append(memory)
+            units.append(ur._memory_units(memory))
+        def answer(self, question): return "unused"
+        def end_context(self): pass
+
+    with BundleReader(tmp_path) as reader:
+        run_context(Probe(), reader, ContextBatch({"context_id": "c"}, memories, []))
+    for index in (0, 2):
+        assert received[index]["content"][0]["annotations"] == {"format": "table"}
+    for index in (1, 3):
+        assert "annotations" not in received[index]["content"][0]
+    for original, visible, corpora in zip(contents, received, units):
+        assert visible["content"][0]["type"] == "text"
+        assert visible["content"][0]["text"] == original["text"]
+        assert corpora["paragraph"] and corpora["document"]
+    assert all(value["table"] for value in units[:3])
+    assert not units[3]["table"]
+    assert "SECRET" not in json.dumps([received, units])
+
+
+def test_base_runner_and_smoke_execute_without_optional_methods_dependencies(tmp_path):
+    rows = {
+        "contexts": [{"context_id": "c", "benchmark": "test"}],
+        "memories": [{"memory_id": "m", "context_id": "c", "sequence": 0,
+                      "content": [{"type": "text", "text": "blue"}]}],
+        "questions": [{"question_id": "q", "context_id": "c", "subset": "qa",
+                       "prompt": [{"type": "text", "text": "Color?"}],
+                       "answer": {"text": "blue"}}],
+        "assets": [],
+    }
+    (tmp_path / "manifest.json").write_text("{}")
+    for table, values in rows.items():
+        (tmp_path / f"{table}.jsonl").write_text("".join(json.dumps(row) + "\n" for row in values))
+    code = textwrap.dedent("""
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, sys.argv[1])
+        from mm_memory_bench.runner.benchmark import run_context
+        from mm_memory_bench.runner.smoke import run_diagnostic_smoke
+        class Probe:
+            def begin_context(self, context): pass
+            def ingest(self, memory): self.text = memory['content'][0]['text']
+            def answer(self, question):
+                assert 'answer' not in question
+                return self.text
+            def end_context(self): pass
+        root = Path(sys.argv[2])
+        report = run_diagnostic_smoke(Probe(), root, root / 'report.json')
+        assert report['prediction']['prediction'] == 'blue'
+        assert 'numpy' not in sys.modules
+        assert 'mm_memory_bench.methods' not in sys.modules
+    """)
+    result = subprocess.run(
+        [sys.executable, "-S", "-c", code, str(Path(__file__).parents[1] / "src"), str(tmp_path)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 

@@ -122,7 +122,7 @@ def test_existing_caption_explicit_asset_mapping_is_not_positional(cls):
 
 
 def test_ambiguous_multi_image_captions_are_not_zipped():
-    from mm_memory_bench.methods.media import caption_metadata_with_sources
+    from mm_memory_bench.preprocessing.captions import caption_metadata_with_sources
     data = memory()
     captions = {"image_captions": ["grinder", "beans"]}
     assert caption_metadata_with_sources(data, captions) == captions
@@ -171,8 +171,56 @@ def test_explicit_and_sidecar_captions_can_coexist_without_annotations(view):
 
 
 def test_single_image_caption_does_not_duplicate_identity():
-    from mm_memory_bench.methods.media import caption_metadata_with_sources
+    from mm_memory_bench.preprocessing.captions import caption_metadata_with_sources
     data = memory(); data["content"] = data["content"][:2]
     result = caption_metadata_with_sources(data, {"caption": "beans"})
     assert result["caption"] == "Image source_id: img_51.jpg\nbeans"
     assert caption_metadata_with_sources(data, result) == result
+
+
+@pytest.mark.parametrize("cls", [ConcreteMemGuideMethod, ConcreteLightMemMethod])
+def test_runner_and_direct_caption_inputs_preserve_mapping_once(cls):
+    from mm_memory_bench.preprocessing.captions import public_captions
+    from mm_memory_bench.runner.benchmark import _resolved_memory
+
+    class Reader:
+        def resolve_content(self, parts): return parts
+        def captions_for_content(self, parts): return []
+
+    data = memory()
+    data["metadata"] = {"derived": {"image_captions": [
+        {"source_id": "img_52.jpg", "caption": "grinder", "private": "SECRET"},
+        {"source_id": "img_51.jpg", "caption": "beans"},
+    ]}}
+    resolved = _resolved_memory(Reader(), data, memory_view="raw_derived")
+    expected = ["Image source_id: img_52.jpg\ngrinder", "Image source_id: img_51.jpg\nbeans"]
+    assert public_captions(data) == public_captions(resolved) == expected
+    for item in (data, resolved):
+        adapter = configured(cls)
+        text = str(stored(adapter, item))
+        assert text.count("Image source_id: img_51.jpg") == 1
+        assert text.count("Image source_id: img_52.jpg") == 1
+        assert "SECRET" not in text
+        adapter._caption.assert_not_called()
+
+
+@pytest.mark.parametrize("cls", [ConcreteAMemMethod, ConcreteMemGuideMethod, ConcreteLightMemMethod])
+def test_generated_caption_cache_is_reusable_across_public_image_ids(cls, tmp_path):
+    image_path = tmp_path / "image.jpg"
+    image_path.write_bytes(b"test image")
+    adapter = configured(cls)
+    del adapter._caption  # Exercise the method's real caption cache with a fake model.
+    adapter.caption_model = Mock(complete=Mock(return_value="beans"))
+    adapter.caption_cache_dir = tmp_path / "captions"
+    adapter.timing = {"caption_seconds": 0.0}
+    for source_id in ("img_51.jpg", "img_52.jpg"):
+        data = {"memory_id": "m", "content": [
+            {"type": "image", "source_id": source_id, "path": str(image_path)}]}
+        text = str(stored(adapter, data))
+        assert f"Image source_id: {source_id}" in text and "beans" in text
+        other = "img_52.jpg" if source_id == "img_51.jpg" else "img_51.jpg"
+        assert other not in text
+    adapter.caption_model.complete.assert_called_once()
+    cached = list(adapter.caption_cache_dir.glob("*.json"))
+    assert len(cached) == 1
+    assert json.loads(cached[0].read_text())["caption"] == "beans"

@@ -8,7 +8,7 @@ from typing import Any, Mapping, Protocol, runtime_checkable
 
 from ..benchmarks.bundle import TOOL_SENSITIVE_KEYS, normalized_tool_key
 from ..benchmarks.reader import BundleReader, ContextBatch
-from ..methods.media import caption_with_source, caption_metadata_with_sources, image_source_inventory
+from ..preprocessing.captions import caption_with_source, caption_metadata_with_sources, image_source_inventory
 
 
 @runtime_checkable
@@ -38,7 +38,7 @@ def _public_metadata(record: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _safe_content(reader: BundleReader, content: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Resolve media without exposing asset provenance or annotation payloads."""
+    """Resolve media, preserving public format markers without private annotations."""
     safe = []
     for part in reader.resolve_content(content):
         value = {
@@ -50,6 +50,9 @@ def _safe_content(reader: BundleReader, content: list[dict[str, Any]]) -> list[d
         # narrow: asset provenance and evaluator annotations remain private.
         if part.get("type") in {"image", "document"} and isinstance(part.get("source_id"), str):
             value["source_id"] = part["source_id"]
+        annotations = part.get("annotations")
+        if isinstance(annotations, Mapping) and annotations.get("format") == "table":
+            value["annotations"] = {"format": "table"}
         safe.append(value)
     return safe
 

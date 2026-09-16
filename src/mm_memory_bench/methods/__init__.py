@@ -9,7 +9,8 @@ from .base import (
 from .amem import AMemMethod
 from .concrete_amem import ConcreteAMemMethod
 from .gme import GMEQwen2VLEmbedder
-from .concrete_memguide import ConcreteMemGuideMethod, NVEmbedV2TextEmbedder, public_captions
+from .concrete_memguide import ConcreteMemGuideMethod, NVEmbedV2TextEmbedder
+from ..preprocessing.captions import public_captions
 from .concrete_lightmem import ConcreteLightMemMethod
 from .concrete_vimrag import (
     ConcreteVimRAGMethod,

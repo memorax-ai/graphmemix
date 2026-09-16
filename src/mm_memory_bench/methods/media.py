@@ -76,47 +76,6 @@ def uniformly_sample_video(
         capture.release()
 
 
-def caption_with_source(part: Mapping[str, Any], caption: str) -> str:
-    """Bind a caption to its public asset identifier outside the caption cache."""
-    source_id = part.get("source_id")
-    prefix = f"Image source_id: {source_id}\n"
-    return prefix + caption if source_id and not caption.startswith(prefix) else caption
-
-
-def image_source_inventory(memory: Mapping[str, Any]) -> str:
-    """Keep public identities even when unstructured captions cannot be paired."""
-    ids = list(dict.fromkeys(str(p["source_id"]) for p in memory.get("content", [])
-                           if p.get("type") == "image" and p.get("source_id")))
-    return "Image source_ids (no caption ordering implied): " + ", ".join(ids) if ids else ""
-
-
-def caption_metadata_with_sources(memory: Mapping[str, Any], derived: Mapping[str, Any]) -> dict:
-    """Bind explicit asset references; never infer multi-image alignment by position."""
-    media = [p for p in memory.get("content", []) if p.get("type") in {"image", "video", "audio"}]
-    images = [p for p in media if p.get("type") == "image" and p.get("source_id")]
-
-    def render(value):
-        if isinstance(value, list):
-            return [render(item) for item in value]
-        if isinstance(value, Mapping):
-            refs = {key: value[key] for key in ("asset_id", "source_id", "path") if value.get(key)}
-            matches = [p for p in images if refs and all(p.get(k) == v for k, v in refs.items())]
-            text = next((value[k] for k in ("final_text", "full_text", "text", "caption", "description")
-                         if isinstance(value.get(k), str) and value[k].strip()), "")
-            # Discard arbitrary annotation fields; expose descriptive text only.
-            return caption_with_source(matches[0], text) if len(matches) == 1 and text else text
-        if isinstance(value, str) and len(media) == 1 and len(images) == 1:
-            return caption_with_source(images[0], value) if value.strip() else value
-        return value
-
-    result = dict(derived)
-    for key in ("caption", "short_caption", "image_caption", "image_captions",
-                "blip_caption", "blip_captions"):
-        if key in result:
-            result[key] = render(result[key])
-    return result
-
-
 def label_retrieved_images(content, units):
     """Attach asset IDs to upstream agent image parts without replacing its tools."""
     labels = {str(unit["file_path"]): unit["media_source_id"] for unit in units

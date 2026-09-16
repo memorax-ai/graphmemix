@@ -10,12 +10,18 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from ..preprocessing.captions import CAPTION_PROMPT, caption_cache_key, load_cached_caption, save_cached_caption
+from ..preprocessing.captions import (
+    CAPTION_PROMPT,
+    caption_cache_key,
+    caption_with_source,
+    image_source_inventory,
+    load_cached_caption,
+    public_captions,
+    save_cached_caption,
+)
 from .backends import AnswerModel, OpenAICompatibleQwenVL, data_url
 from .base import BaseMemoryMethod, GenerationConfig, MethodCapabilities, MethodResult
-from .concrete_memguide import public_captions
 from .answer_input import build_answer_task
-from .media import caption_with_source, image_source_inventory
 from .media import question_text, uniformly_sample_video
 
 

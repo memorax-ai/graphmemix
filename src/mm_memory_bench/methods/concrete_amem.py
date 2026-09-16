@@ -17,7 +17,9 @@ import numpy as np
 from ..preprocessing.captions import (
     CAPTION_PROMPT,
     caption_cache_key,
+    caption_with_source,
     load_cached_caption,
+    public_captions,
     save_cached_caption,
 )
 from .amem import AMemMethod
@@ -29,9 +31,7 @@ from .backends import (
     data_url,
 )
 from .base import GenerationConfig
-from .concrete_memguide import public_captions
 from .answer_input import build_answer_task
-from .media import caption_with_source
 from .media import openai_content_from_parts, question_text, text_from_parts, uniformly_sample_video
 from .vector_index import FaissFlatIPIndex, VectorIndex
 
