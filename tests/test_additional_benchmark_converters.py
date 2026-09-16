@@ -11,6 +11,8 @@ from pathlib import Path
 from mm_memory_bench.benchmarks.bundle import SchemaError, iter_jsonl, load_bundle
 from mm_memory_bench.benchmarks.registry import convert
 from mm_memory_bench.benchmarks.reader import BundleReader
+from mm_memory_bench.evaluation.native import score_question
+from mm_memory_bench.methods.answer_input import build_answer_task
 from mm_memory_bench.runner.benchmark import _resolved_memory, _resolved_question, run_bundle
 
 
@@ -171,11 +173,56 @@ class AdditionalConverters(unittest.TestCase):
                 w.writerow(row)
         convert("personamem_v2", self.raw, self.out)
         qs = self.rows("personamem_v2", "questions")
-        self.assertEqual(len(qs), 4)
+        self.assertEqual(len(qs), 6)
         self.assertEqual(qs[0]["semantic_question_id"], qs[1]["semantic_question_id"])
         self.assertEqual(qs[0]["choices"], qs[1]["choices"])
         self.assertTrue(all(len(q["evidence"]) == 1 for q in qs))
         self.assertNotIn("DO_NOT_INJECT", str(self.rows("personamem_v2", "memories")))
+        opened = [q for q in qs if q["subset"].endswith("_generative")]
+        self.assertEqual(len(opened), 2)
+        with BundleReader(self.out / "personamem_v2") as reader:
+            for item in qs:
+                if item["task"]["response_type"] != "choice":
+                    continue
+                public = _resolved_question(reader, item)
+                task = build_answer_task(public).text
+                self.assertIn("Return its label.", task)
+                self.assertNotIn("Final Answer:", task)
+                self.assertNotIn("answer", public)
+                self.assertNotIn("metadata", public)
+                self.assertNotIn("DO_NOT_INJECT", task)
+                label = next(c["choice_id"] for c in public["choices"] if c["text"] == "Blue")
+                self.assertEqual(
+                    score_question("personamem_v2", item, label)[0],
+                    {"choice_accuracy": 1.0},
+                )
+                wrong = next(c["choice_id"] for c in public["choices"] if c["text"] != "Blue")
+                self.assertEqual(
+                    score_question("personamem_v2", item, wrong)[0],
+                    {"choice_accuracy": 0.0},
+                )
+        by_id = {q["question_id"]: q for q in qs}
+        for row in opened:
+            paired = by_id[row["metadata"]["paired_mcq_question_id"]]
+            self.assertEqual(row["prompt"], paired["prompt"])
+            self.assertEqual(row["context_id"], paired["context_id"])
+            self.assertEqual(row["semantic_question_id"], paired["semantic_question_id"])
+            self.assertEqual(row["evidence"], paired["evidence"])
+            self.assertEqual(row["instruction"], "")
+            self.assertNotIn("choices", row)
+            self.assertEqual(row["answer"], {"text": "Blue"})
+            self.assertEqual(row["metadata"]["preference"], "DO_NOT_INJECT")
+            self.assertEqual(row["prompt"][0]["text"], row["metadata"]["native_user_query"] + " Please recall my related preferences from our conversation history to give personalized responses.")
+            self.assertEqual(row["task"]["response_type"], "text")
+            public = _resolved_question(BundleReader(self.out / "personamem_v2"), row)
+            self.assertNotIn("DO_NOT_INJECT", str(public))
+            self.assertNotIn("answer", public)
+            self.assertNotIn("choices", public)
+            self.assertNotIn("preference", public.get("metadata", {}))
+
+        self.assertEqual(len(self.rows("personamem_v2", "contexts")), 4)
+        self.assertEqual(len(self.rows("personamem_v2", "memories")), 8)
+
 
     def test_smm_zero_based_assignment_and_misleading_separation(self):
         self.write(
@@ -233,6 +280,55 @@ class AdditionalConverters(unittest.TestCase):
             q["misleading_evidence"][0]["memory_id"], memories[1]["memory_id"]
         )
         self.assertEqual(q["answer"]["choice_id"], "1")
+        self.assertEqual(q["answer"]["native_label"], "1")
+
+    def test_smm_mcq_public_labels_roundtrip_to_native_scoring(self):
+        self.write(
+            "smmbench/Samples/cluster_1/group_chat_x.json",
+            {"conversation": [{"content": "history", "timestamp": "1"}]},
+        )
+        options = ["Blue", "Red", "Green", "Yellow"]
+        self.write(
+            "smmbench/Samples/cluster_1/QA_sample.json",
+            [
+                {
+                    "id": str(i), "category": "QA", "domain": "D",
+                    "question": f"Select {color}.", "answer": "PRIVATE_NATIVE_ANSWER",
+                    "multi_choice_QA": {
+                        "multi_choice_QA_answer": i,
+                        "multi_choice_QA_options": options,
+                    },
+                    "evidence_assignment": {},
+                }
+                for i, color in enumerate(options)
+            ],
+        )
+        convert("smmbench", self.raw, self.out)
+        with BundleReader(self.out / "smmbench") as reader:
+            for i, item in enumerate(self.rows("smmbench", "questions")):
+                public = _resolved_question(reader, item)
+                task = build_answer_task(public).text
+                self.assertIn("Return its label.", task)
+                self.assertEqual(
+                    [c["choice_id"] for c in public["choices"]],
+                    ["0", "1", "2", "3"],
+                )
+                self.assertEqual([c["text"] for c in public["choices"]], options)
+                self.assertEqual(item["answer"]["native_label"], str(i))
+                self.assertNotIn("answer", public)
+                self.assertNotIn("metadata", public)
+                self.assertNotIn("PRIVATE_NATIVE_ANSWER", task)
+                label = public["choices"][i]["choice_id"]
+                self.assertIn(f"{label}: {options[i]}", task)
+                self.assertEqual(
+                    score_question("smmbench", item, label)[0],
+                    {"choice_accuracy": 1.0},
+                )
+                wrong = public["choices"][(i + 1) % 4]["choice_id"]
+                self.assertEqual(
+                    score_question("smmbench", item, wrong)[0],
+                    {"choice_accuracy": 0.0},
+                )
 
     def test_omni_normalizes_directories_without_changing_person_names(self):
         from mm_memory_bench.benchmarks.converters.mobilemem_omni import (

@@ -192,7 +192,7 @@ def _parser() -> argparse.ArgumentParser:
     judge_parser.add_argument("bundle", type=Path)
     judge_parser.add_argument("predictions", type=Path)
     judge_parser.add_argument("--output", type=Path, required=True)
-    judge_parser.add_argument("--model", required=True)
+    judge_parser.add_argument("--model", help="required when the selected tasks need an LLM Judge")
     judge_parser.add_argument("--base-url", default="https://api.openai.com/v1")
     judge_parser.add_argument("--api-key-env", default="OPENAI_API_KEY")
     judge_parser.add_argument("--timeout-seconds", type=float, default=120.0)
@@ -204,6 +204,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     judge_parser.add_argument("--concurrency", type=int, default=1)
     judge_parser.add_argument("--no-resume", action="store_true")
+    judge_parser.add_argument("--scoring-protocol", choices=["qa", "personamem_v2_open", "m3exam", "mobilemem_omni", "benchmark"], default="qa",
+                              help="qa: binary correctness; personamem_v2_open: preference score; benchmark: per-task script/LLM dispatch")
     return parser
 
 
@@ -612,22 +614,44 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "judge":
             from .evaluation.judge import backend_from_env, judge_predictions
 
-            backend = backend_from_env(
-                model=args.model,
-                base_url=args.base_url,
-                api_key_env=args.api_key_env,
-                timeout_seconds=args.timeout_seconds,
-            )
-            result = judge_predictions(
-                backend,
-                args.bundle,
-                args.predictions,
-                args.output,
-                resume=not args.no_resume,
-                max_items=args.max_items,
-                question_ids_path=args.question_ids,
-                concurrency=args.concurrency,
-            )
+            if args.scoring_protocol == "benchmark":
+                from .evaluation.dispatcher import score_benchmark
+
+                result = score_benchmark(
+                    args.bundle, args.predictions, args.output,
+                    model=args.model, base_url=args.base_url,
+                    api_key_env=args.api_key_env, timeout_seconds=args.timeout_seconds,
+                    resume=not args.no_resume, max_items=args.max_items,
+                    question_ids_path=args.question_ids, concurrency=args.concurrency,
+                )
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+                return 1 if result["failed_judgments"] else 0
+            if not args.model:
+                raise ValueError("--model is required for LLM scoring")
+            if args.scoring_protocol == "qa":
+                backend = backend_from_env(
+                    model=args.model, base_url=args.base_url,
+                    api_key_env=args.api_key_env, timeout_seconds=args.timeout_seconds,
+                )
+                result = judge_predictions(
+                    backend, args.bundle, args.predictions, args.output,
+                    resume=not args.no_resume, max_items=args.max_items,
+                    question_ids_path=args.question_ids, concurrency=args.concurrency,
+                )
+            else:
+                from .evaluation import native_runner
+
+                backend = native_runner.backend_from_env(
+                    model=args.model, base_url=args.base_url,
+                    api_key_env=args.api_key_env, timeout_seconds=args.timeout_seconds,
+                    scoring_protocol=args.scoring_protocol,
+                )
+                result = native_runner.judge_predictions(
+                    backend, args.bundle, args.predictions, args.output,
+                    resume=not args.no_resume, max_items=args.max_items,
+                    question_ids_path=args.question_ids, concurrency=args.concurrency,
+                    scoring_protocol=args.scoring_protocol,
+                )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 1 if result["failed_judgments"] else 0
     except (FileNotFoundError, FileExistsError, KeyError, RuntimeError, SchemaError, ValueError) as exc:
