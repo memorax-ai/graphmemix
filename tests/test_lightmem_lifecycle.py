@@ -20,7 +20,8 @@ class LocalRetriever:
     def __init__(self, path):
         qdrant = pytest.importorskip("qdrant_client")
         self.client = qdrant.QdrantClient(path=str(path))
-        self.models = qdrant.models
+        from qdrant_client.http import models
+        self.models = models
         if not self.client.collection_exists("facts"):
             self.client.create_collection(
                 "facts", vectors_config=self.models.VectorParams(

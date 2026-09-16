@@ -208,6 +208,8 @@ def _resolved_question(reader: BundleReader, question: Mapping[str, Any]) -> dic
         "subset",
         "split",
         "instruction",
+        "instruction_role",
+        "instruction_includes_tools",
         "tool_mode",
     }
     value = {key: item for key, item in question.items() if key in allowed}

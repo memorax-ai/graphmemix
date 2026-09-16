@@ -862,7 +862,7 @@ class ConcreteUniversalRAGMethod(UniversalRAGMethod):
             elif unit.get("video"):
                 for frame in uniformly_sample_video(str(unit["video"]), self.video_frames):
                     content.append({"type": "image_url", "image_url": {"url": frame}})
-        return self.answer_model.complete([{"role": "user", "content": content}], tools=task.api_tools)
+        return self.answer_model.complete(task.messages(content), tools=task.api_tools)
 
     def _state_path(self) -> Path | None:
         if self.checkpoint_dir is None:

@@ -149,3 +149,33 @@ evaluation/
 PersonaMem-v2 使用官方 `extract_judge_decision` 的数值规则，包括无法解析时返回 0；省略官方函数仅用于控制台的警告输出。协议更新为 `mmmb-personamem-v2-narrow-1.1`，旧版本评分缓存会重新计算。原 `qa` 的提示词、正确性判断和准确率公式保持不变；`judge.py` 已完整恢复为原提交版本。专用评分的选题、输入哈希、调用和续跑放在 `native_runner.py`，各 native 模块直接暴露函数，不再使用包装协议类。
 
 `tmp/official-judge-validation/verify_persona_and_qa.py` 对照官方两个 PersonaMem-v2 prompt、3,005 个解析案例与三种偏好输入的实际提示词调用；另直接加载当前 HEAD 中的原 judge.py，对正确、错误、空回答、API 失败、方法失败五种记录核对原字段和汇总值。差分无不一致。Omni JSON 解析使用本仓库实现，其官方提示词、参考选择、证据映射及可见汇总规则分别验证，不将缺失源码的解析部分冒充官方对照通过。
+
+### SMMBench choice inputs
+
+- 新转换的 SMMBench MCQ 使用官方 `(A)`–`(D)` 选项标签，并保留原始答案索引。旧 bundle 的纯数字以及完整的 `数字: 对应公开选项文字` 输出会转换为字母标签后调用原生评分；不解析任意解释文本，不根据标准答案进行转换。工具计划规则不变。
+
+### SMMBench planning instructions
+
+Newly converted tool questions render the official planner system prompt from
+SMMBench `c52cf9d2b6b800784b097d6c055b0e9d8d105842`, including its candidate-tool
+format and single-step `{"calls": [...]}` output. `instruction_role="system"`
+marks this self-contained instruction; `instruction_includes_tools=true`
+explicitly declares that the candidate list is already rendered. A system role
+alone never suppresses the separate candidate list. Older bundles without this
+flag may repeat the candidates; reconvert to obtain the explicit declaration.
+The shared answer-input layer preserves that role for Reader adapters and joins
+benchmark requirements with any existing method system constraints, rather than
+replacing them. Thus the official template is preserved, but a method's combined
+system message may contain its own additional constraints. VimRAG receives the same requirements as agent
+task text, retaining its own system prompt and executable retrieval tools.
+Other questions retain their original message layout and retrieval queries.
+
+Published references with an empty first step still conflict with the official
+single-step instruction. Keep those questions and their original scores, and
+report that conflict separately: do not choose the prompt by inspecting gold,
+remove empty steps, or relax scoring. Prompt alignment does not imply reproducing
+the official baseline's model, retriever, or evidence organization.
+
+Existing bundles need reconversion to receive the new instructions. A controlled
+prompt comparison may reuse the same memory index and frozen retrieved evidence,
+but must generate fresh predictions and retain the old artifacts separately.

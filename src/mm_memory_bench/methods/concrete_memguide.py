@@ -477,7 +477,7 @@ class ConcreteMemGuideMethod(BaseMemoryMethod):
             "Answer using only the selected memory evidence.\n\n" + rendered
         )
         return self.answer_model.complete(
-            [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
+            task.messages([{"type": "text", "text": prompt}]),
             tools=task.api_tools,
         )
 

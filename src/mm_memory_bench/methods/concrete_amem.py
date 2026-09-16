@@ -647,11 +647,8 @@ class ConcreteAMemMethod(AMemMethod):
     def generate_answer(self, question, notes):
         evidence = "\n\n".join(json.dumps(note, ensure_ascii=False) for note in notes)
         task = build_answer_task(question)
-        messages = [
-            {"role": "system", "content": "Answer only from retrieved memory evidence."},
-            {
-                "role": "user",
-                "content": f"{task.text}\nEvidence:\n{evidence}",
-            },
-        ]
+        messages = task.messages(
+            f"{task.text}\nEvidence:\n{evidence}",
+            default_system="Answer only from retrieved memory evidence.",
+        )
         return self.answer_model.complete(messages, tools=task.api_tools)

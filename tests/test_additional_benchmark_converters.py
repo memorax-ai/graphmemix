@@ -279,7 +279,7 @@ class AdditionalConverters(unittest.TestCase):
         self.assertEqual(
             q["misleading_evidence"][0]["memory_id"], memories[1]["memory_id"]
         )
-        self.assertEqual(q["answer"]["choice_id"], "1")
+        self.assertEqual(q["answer"]["choice_id"], "(B)")
         self.assertEqual(q["answer"]["native_label"], "1")
 
     def test_smm_mcq_public_labels_roundtrip_to_native_scoring(self):
@@ -311,7 +311,7 @@ class AdditionalConverters(unittest.TestCase):
                 self.assertIn("Return its label.", task)
                 self.assertEqual(
                     [c["choice_id"] for c in public["choices"]],
-                    ["0", "1", "2", "3"],
+                    ["(A)", "(B)", "(C)", "(D)"],
                 )
                 self.assertEqual([c["text"] for c in public["choices"]], options)
                 self.assertEqual(item["answer"]["native_label"], str(i))
@@ -321,7 +321,7 @@ class AdditionalConverters(unittest.TestCase):
                 label = public["choices"][i]["choice_id"]
                 self.assertIn(f"{label}: {options[i]}", task)
                 self.assertEqual(
-                    score_question("smmbench", item, label)[0],
+                    score_question("smmbench", item, f"{label}: {options[i]}")[0],
                     {"choice_accuracy": 1.0},
                 )
                 wrong = public["choices"][(i + 1) % 4]["choice_id"]
@@ -388,6 +388,18 @@ class AdditionalConverters(unittest.TestCase):
         convert("smmbench", self.raw, self.out)
         q = self.rows("smmbench", "questions")[0]
         self.assertEqual(q["tools"], tools)
+        from mm_memory_bench.benchmarks.converters.smmbench import function_plan_instruction
+        self.assertEqual(q["instruction"], function_plan_instruction(tools))
+        self.assertEqual(q["instruction_role"], "system")
+        self.assertIs(q["instruction_includes_tools"], True)
+        with BundleReader(self.out / "smmbench") as reader:
+            public = _resolved_question(reader, q)
+            self.assertIs(public["instruction_includes_tools"], True)
+            self.assertEqual(function_plan_instruction(tools), build_answer_task(public).system_text)
+            self.assertNotIn("Candidate tools:", build_answer_task(public).text)
+            self.assertNotIn("native_answer", build_answer_task(public).text)
+        self.assertEqual(q["metadata"]["native_answer"],
+                         [{"step": 1, "calls": [{"name": "lookup", "arguments": {}}]}])
         self.assertEqual(q["task"]["response_type"], "structured_json")
         memory = self.rows("smmbench", "memories")[0]
         self.assertIn("Fig. abcdef12", str(memory["content"]))

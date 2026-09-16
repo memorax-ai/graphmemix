@@ -677,7 +677,7 @@ class ConcreteLightMemMethod(BaseMemoryMethod):
             "Answer using only the retrieved LightMem evidence.\n\n" + rendered
         )
         prediction = self.answer_model.complete(
-            [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
+            task.messages([{"type": "text", "text": prompt}]),
             tools=task.api_tools,
         )
         ids = list(

@@ -17,6 +17,59 @@ from ..bundle import (
 from ._shared import Assets, as_text, choices, locate, question, source_manifest
 
 
+# Official SMMBench evaluation/agents/prompt.py, c52cf9d2b6b800784b097d6c055b0e9d8d105842.
+# Preserve its single-step protocol even when published references conflict;
+# never inspect the gold answer to select a different instruction.
+FUNCTION_PLAN_INSTRUCTION = """\
+You are a function-calling planner. You will be given recalled context from a conversation, a user question, and a candidate tool set.
+
+Your task is to determine the correct function calls needed to answer the question.
+
+## Specific Instructions
+1. Use only the candidate tools listed below.
+2. Do not answer the question in natural language.
+3. Output only the function-call plan as valid JSON.
+4. Use the exact tool names from the candidate tools list.
+5. Include every required argument and do not invent unsupported arguments.
+6. Plan only the function calls required by the question itself. You do not need to reproduce a full workflow from the context if some steps are irrelevant to answering the question.
+7. Return only one step of calls. Do not generate multiple sequential steps.
+8. A single `calls` list may contain multiple parallel calls if the question requires them.
+
+## Candidate Tools
+{candidate_tools}
+
+## Output Format
+Return a JSON object with this exact structure:
+{{
+  "calls": [
+    {{
+      "name": "FUNCTION_NAME",
+      "arguments": {{
+        "arg_name": "arg_value"
+      }}
+    }}
+  ]
+}}
+
+If multiple tool invocations are needed, place them together inside the same `calls` array.
+
+Do not wrap the JSON in markdown code fences. Do not output any extra commentary.
+"""
+
+
+def function_plan_instruction(tools):
+    """Render the official planner prompt with public candidate descriptions."""
+    candidates = []
+    for tool in tools:
+        name = str(tool.get("function_name", "")).strip()
+        comment = str(tool.get("function_comment", "")).strip()
+        if name:
+            candidates.append(f"- {name}\n{comment}" if comment else f"- {name}")
+    return FUNCTION_PLAN_INSTRUCTION.format(
+        candidate_tools="\n\n".join(candidates) or "No candidate tools available."
+    )
+
+
 def _parts(value, assets, root):
     """Materialize images embedded in native JSON evidence, not just outer images."""
     if isinstance(value, list):
@@ -147,7 +200,9 @@ def convert(raw_root: Path, output_root: Path, *, overwrite=False):
                     q.update(
                         tools=tools,
                         tool_mode="plan",
-                        instruction="Return a JSON list of steps: each has step (integer) and calls (list of objects with name and arguments). Plan only; do not execute tools.",
+                        instruction=function_plan_instruction(tools),
+                        instruction_role="system",
+                        instruction_includes_tools=True,
                     )
                     q["task"]["response_type"] = "structured_json"
                 else:
@@ -155,11 +210,12 @@ def convert(raw_root: Path, output_root: Path, *, overwrite=False):
                     choices(
                         q,
                         {
-                            str(i): as_text(x)
+                            f"({chr(65 + i)})": as_text(x)
                             for i, x in enumerate(mcq["multi_choice_QA_options"])
                         },
-                        str(mcq["multi_choice_QA_answer"]),
+                        "(" + chr(65 + int(mcq["multi_choice_QA_answer"])) + ")",
                     )
+                    q["answer"]["native_label"] = str(mcq["multi_choice_QA_answer"])
                 gold, misleading = {}, {}
                 for field, refs in native.get("evidence_assignment", {}).items():
                     target = misleading if field.startswith("mis_") else gold

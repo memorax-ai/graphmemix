@@ -119,6 +119,70 @@ class AnswerInputTest(unittest.TestCase):
                     for secret in ['GOLD_SECRET', 'EVIDENCE_SECRET', 'METADATA_SECRET']:
                         self.assertNotIn(secret, text)
 
+    def test_smmbench_requirements_reach_readers_without_changing_query(self):
+        from mm_memory_bench.benchmarks.converters.smmbench import function_plan_instruction
+        q = question()
+        retrieval_query = question_text(q)
+        q['tools'] = [{'function_name': 'book_train', 'function_comment': 'Book a train.'}]
+        q['instruction'] = function_plan_instruction(q['tools'])
+        q['instruction_role'] = 'system'
+        q['instruction_includes_tools'] = True
+        self.assertEqual(question_text(q), retrieval_query)
+        self.assertIn('only one step', q['instruction'].lower())
+        for cls in [ConcreteAMemMethod, ConcreteMemGuideMethod,
+                    ConcreteUniversalRAGMethod, ConcreteLightMemMethod]:
+            with self.subTest(method=cls.__name__):
+                method = make_method(cls)
+                if cls is ConcreteAMemMethod:
+                    method.generate_answer(q, [])
+                elif cls is ConcreteMemGuideMethod:
+                    method._generate_answer(q, [])
+                elif cls is ConcreteUniversalRAGMethod:
+                    method.generate_answer(q, [])
+                else:
+                    method.backend = SimpleNamespace(retrieve=Mock(return_value=[]))
+                    method._answer(q)
+                    method.backend.retrieve.assert_called_once_with(retrieval_query, limit=10)
+                expected_system = q['instruction']
+                if cls is ConcreteAMemMethod:
+                    expected_system = 'Answer only from retrieved memory evidence.\n\n' + expected_system
+                self.assertEqual(method.answer_model.complete.call_args.args[0][0],
+                                 {'role': 'system', 'content': expected_system})
+                self.assertEqual(request_text(method.answer_model).count('Book a train.'), 1)
+                for secret in ['GOLD_SECRET', 'EVIDENCE_SECRET', 'METADATA_SECRET']:
+                    self.assertNotIn(secret, request_text(method.answer_model))
+                self.assertIsNone(method.answer_model.complete.call_args.kwargs['tools'])
+
+    def test_method_system_rules_are_retained_with_benchmark_requirements(self):
+        from mm_memory_bench.methods.answer_input import AnswerTask
+        task = AnswerTask(text='Question', system_text='Return a plan.')
+        self.assertEqual(task.messages('evidence', default_system='Use memory only.'), [
+            {'role': 'system', 'content': 'Use memory only.\n\nReturn a plan.'},
+            {'role': 'user', 'content': 'evidence'},
+        ])
+        self.assertEqual(task.messages('evidence', default_system='Return a plan.')[0]['content'],
+                         'Return a plan.')
+        self.assertEqual(AnswerTask(text='Question').messages('evidence', default_system='Original'), [
+            {'role': 'system', 'content': 'Original'}, {'role': 'user', 'content': 'evidence'},
+        ])
+
+    def test_system_role_without_embedded_tools_keeps_candidates(self):
+        for flag in [None, False, 'true']:
+            with self.subTest(flag=flag):
+                q = question()
+                q['instruction_role'] = 'system'
+                if flag is not None:
+                    q['instruction_includes_tools'] = flag
+                task = build_answer_task(q)
+                self.assertEqual(json.loads(task.text.split('Candidate tools:\n')[1]), q['tools'])
+                self.assertEqual(task.system_text, q['instruction'])
+                self.assertIsNone(task.api_tools)
+                self.assertTrue(task.is_tool_plan)
+                self.assertIn('book_train', task.agent_text)
+        q['instruction_includes_tools'] = True
+        q['instruction'] = ''
+        self.assertIn('book_train', build_answer_task(q).text)
+
     def test_api_tools_forwarding_for_reader_adapters(self):
         q = question()
         q.pop('tool_mode')
@@ -156,17 +220,23 @@ class AnswerInputTest(unittest.TestCase):
         method.video_frames = 8
         method._query_media = Mock(return_value=[])
         method._search = Mock()
-        plan_answer = [{'step': 1, 'calls': [{'name': 'book_train', 'arguments': {'destination': '北京'}}]}]
+        plan_answer = {'calls': [{'name': 'book_train', 'arguments': {'destination': '北京'}}]}
         agent = SimpleNamespace(run=Mock(side_effect=lambda sample: iter([
-            {'event': 'answer', 'content': plan_answer if 'Candidate tools:' in sample['query'] else '[]', 'sample': sample}])))
+            {'event': 'answer', 'content': plan_answer if ('Candidate tools:' in sample['query'] or '## Candidate Tools' in sample['query']) else '[]', 'sample': sample}])))
         method.agent_factory = Mock(return_value=agent)
         for plan in [False, True]:
             q = question(plan)
+            if plan:
+                from mm_memory_bench.benchmarks.converters.smmbench import function_plan_instruction
+                q['tools'] = [{'function_name': 'book_train', 'function_comment': 'Book a train.'}]
+                q['instruction'] = function_plan_instruction(q['tools'])
+                q['instruction_role'] = 'system'
+                q['instruction_includes_tools'] = True
             result = method._answer(q)
             self.assertEqual(json.loads(result.prediction), plan_answer if plan else [])
             task_text = agent.run.call_args.args[0]['query']
             if plan:
-                self.assertTrue(task_text.startswith(build_answer_task(q, question_first=True).text))
+                self.assertTrue(task_text.startswith(build_answer_task(q, question_first=True).agent_text))
                 self.assertIn('not executable VimRAG actions', task_text)
                 self.assertIn('add_answer_node', task_text)
                 self.assertIn('JSON-encoded string', task_text)

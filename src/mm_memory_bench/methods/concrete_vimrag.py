@@ -501,7 +501,7 @@ class ConcreteVimRAGMethod(BaseMemoryMethod):
             max_steps=self.max_steps,
             video_frames=self.video_frames,
         )
-        query = task.text
+        query = task.agent_text
         if task.is_tool_plan:
             query += (
                 "\n\nThe candidate tools above are planning data, not executable VimRAG actions. "

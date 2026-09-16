@@ -163,6 +163,13 @@ def _personamem_v2_extract_final_answer(response: str) -> str:
 def adapt_choice_prediction(benchmark, choices, prediction):
     """Translate complete public option labels without consulting reference answers."""
     label = prediction.strip()
+    if benchmark == 'smmbench':
+        # Legacy bundles displayed numeric labels. Accept a complete public
+        # option rendering only; never consult gold or parse arbitrary prose.
+        for choice in choices:
+            cid = str(choice['choice_id'])
+            if cid in ('0', '1', '2', '3') and label == f"{cid}: {choice['text']}":
+                return f'({chr(65 + int(cid))})'
     labels = {str(choice['choice_id']).upper() for choice in choices}
     if label.upper() not in labels:
         return prediction
