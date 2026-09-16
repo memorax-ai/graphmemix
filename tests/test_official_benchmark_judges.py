@@ -143,3 +143,60 @@ def test_empty_prediction_policy_and_wrong_bundle(tmp_path):
     (tmp_path/"manifest.json").write_text(json.dumps({"benchmark":"M3Exam"}))
     with pytest.raises(ValueError, match="requires"):
         judge_predictions(backend, tmp_path, pp, out, scoring_protocol="mobilemem_omni")
+
+
+@pytest.mark.parametrize("content,finish", [("", "length"), ("1", "length"),
+                                          ("", "stop"), (None, "stop")])
+def test_invalid_transport_is_error_and_keeps_usage(tmp_path, content, finish):
+    from mm_memory_bench.evaluation.native_runner import JudgeResponseError
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def read(self):
+            return json.dumps({"choices": [{"message": {"content": content},
+                                           "finish_reason": finish}],
+                               "usage": {"completion_tokens": 16}}).encode()
+    backend = OpenAICompatibleJudge(model="fixture", scoring_protocol="m3exam", max_tokens=512)
+    question = q()
+    (tmp_path / "manifest.json").write_text(json.dumps({"benchmark": "m3exam"}))
+    (tmp_path / "questions.jsonl").write_text(json.dumps(question) + "\n")
+    pred = tmp_path / "predictions.jsonl"
+    pred.write_text(json.dumps({"question_id": question["question_id"], "prediction": "answer"}) + "\n")
+    out = tmp_path / "out.jsonl"
+    with patch("urllib.request.urlopen", return_value=Response()) as call:
+        result = judge_predictions(backend, tmp_path, pred, out, scoring_protocol="m3exam")
+    row = json.loads(out.read_text())
+    assert result["failed_judgments"] == 1
+    assert row["status"] == "error"
+    assert row["judge_response_metadata"]["finish_reason"] == finish
+    assert row["judge_response_metadata"]["usage"]["completion_tokens"] == 16
+    assert json.loads(call.call_args.args[0].data)["max_tokens"] == 512
+    # A valid zero must remain a successful score, and a failed cache must retry.
+    with patch("urllib.request.urlopen", return_value=Response()):
+        with pytest.raises(JudgeResponseError): backend.judge(m3.judge_item(question, "answer"))
+
+
+def test_request_budget_change_invalidates_cached_judgment(tmp_path):
+    question = q()
+    (tmp_path / "manifest.json").write_text(json.dumps({"benchmark": "m3exam"}))
+    (tmp_path / "questions.jsonl").write_text(json.dumps(question) + "\n")
+    pred = tmp_path / "predictions.jsonl"
+    pred.write_text(json.dumps({"question_id": question["question_id"], "prediction": "answer"}) + "\n")
+    out = tmp_path / "out.jsonl"
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def read(self): return json.dumps({"choices": [{"message": {"content": "0"}, "finish_reason": "stop"}], "usage": {"completion_tokens": 74}}).encode()
+    backend = OpenAICompatibleJudge(model="fixture", scoring_protocol="m3exam", max_tokens=512)
+    with patch("urllib.request.urlopen", return_value=Response()) as call:
+        for _ in range(2): judge_predictions(backend, tmp_path, pred, out, scoring_protocol="m3exam")
+        assert call.call_count == 1
+        assert json.loads(out.read_text())["status"] == "ok"
+        assert json.loads(out.read_text())["score"] == 0
+        old = json.loads(out.read_text()); old.pop("judge_request_config")
+        out.write_text(json.dumps(old) + "\n")
+        judge_predictions(backend, tmp_path, pred, out, scoring_protocol="m3exam")
+        assert call.call_count == 2
+        backend = OpenAICompatibleJudge(model="fixture", scoring_protocol="m3exam", max_tokens=1024)
+        judge_predictions(backend, tmp_path, pred, out, scoring_protocol="m3exam")
+        assert call.call_count == 3

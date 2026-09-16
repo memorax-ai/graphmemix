@@ -4,10 +4,11 @@ import json
 from pathlib import Path
 
 from ..benchmarks.bundle import read_json, write_json
+from .prediction_status import method_failure
 from .native_runner import backend_from_env, get_scorer, judge_predictions
 from .native.script_judge import _load, score_predictions, score_question
 
-DISPATCH_VERSION = "mmmb-benchmark-dispatch-2.1"
+DISPATCH_VERSION = "mmmb-benchmark-dispatch-2.2"
 BENCHMARKS = {"smmbench", "persona_mme", "personamem_v2", "m3exam", "mobilemem_omni"}
 
 
@@ -42,7 +43,7 @@ def scoring_route(benchmark, question):
 def score_benchmark(bundle, predictions, output, *, model=None,
                     base_url="https://api.openai.com/v1", api_key_env="OPENAI_API_KEY",
                     timeout_seconds=120.0, resume=True, max_items=None,
-                    question_ids_path=None, concurrency=1):
+                    question_ids_path=None, concurrency=1, judge_max_tokens=None):
     """Preflight all selected tasks, then score disjoint groups without rerunning methods."""
     bundle, predictions, output = Path(bundle), Path(predictions), Path(output)
     if concurrency < 1:
@@ -112,7 +113,7 @@ def score_benchmark(bundle, predictions, output, *, model=None,
     # Construct clients only for routes that need a model; constructors do no API I/O.
     backends = {route: backend_from_env(model=model, base_url=base_url,
                 api_key_env=api_key_env, timeout_seconds=timeout_seconds,
-                scoring_protocol=route) for route in llm_routes}
+                scoring_protocol=route, max_tokens=judge_max_tokens) for route in llm_routes}
     results = {}
     for route, ids in groups.items():
         path = paths[route]
@@ -129,9 +130,7 @@ def score_benchmark(bundle, predictions, output, *, model=None,
         results[route] = {"assigned": len(ids), "completed": len(records),
                           "statuses": dict(Counter(r.get("status") for r in records.values())),
                           "method_failures": sum(
-                              isinstance(predicted[qid].get("metadata"), dict) and (
-                                  predicted[qid]["metadata"].get("status") == "error" or
-                                  bool(predicted[qid]["metadata"].get("error_type"))) for qid in ids),
+                              method_failure(predicted[qid]) is not None for qid in ids),
                           "output": str(path), "summary": result}
     summary = {"benchmark": benchmark, "dispatch_protocol": DISPATCH_VERSION,
                "scoring_protocol": "benchmark", "selected_questions": len(selected),

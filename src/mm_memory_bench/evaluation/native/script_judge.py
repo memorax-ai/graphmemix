@@ -7,6 +7,8 @@ import hashlib
 import json
 import re
 import string
+
+from ..prediction_status import method_failure
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -215,7 +217,7 @@ def choice_score(question, prediction):
 
 
 BENCHMARKS = ('smmbench', 'persona_mme', 'personamem_v2', 'm3exam')
-PROTOCOL = 'mmmb-native-scripts-2.1'
+PROTOCOL = 'mmmb-native-scripts-2.2'
 
 
 def score_question(benchmark, question, prediction):
@@ -284,12 +286,11 @@ def score_predictions(bundle, predictions, output, *, benchmark, question_ids=No
         if not isinstance(value, str):
             raise ValueError(f'{qid}: prediction must be text or JSON object/list')
         scores, status, details = score_question(benchmark, q, value)
-        metadata = predictions[qid].get('metadata')
-        failed = isinstance(metadata, dict) and (
-            metadata.get('status') == 'error' or bool(metadata.get('error_type')))
-        if failed:
+        failure = method_failure(predictions[qid])
+        if failure:
             scores = {key: 0. for key in scores}
             status = 'method_error'
+            details = {**details, **failure}
         elif not value.strip():
             # Retain native metric semantics, including empty-reference boundaries.
             status = 'empty_prediction'

@@ -112,9 +112,10 @@ def summarize(records):
     groups = defaultdict(list)
     for row in records:
         groups[row["native_type"]].append(row)
-    failed = sum(r.get("status") != "ok" for r in records)
+    failed = sum(r.get("status") == "error" for r in records)
     return {"metric": "llm_score", "total_predictions": len(records),
-            "valid_judgments": len(records) - failed, "failed_judgments": failed,
+            "valid_judgments": sum(r.get("status") == "ok" for r in records), "failed_judgments": failed,
+            "method_failures": sum(r.get("status") == "method_error" for r in records),
             "total": summarize_group(records),
             "per_type": {kind: summarize_group(rows) for kind, rows in groups.items()}}
 

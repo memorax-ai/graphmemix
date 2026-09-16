@@ -184,7 +184,7 @@ def test_adapted_scoring_preserves_raw_input_files(tmp_path, benchmark, label):
     output = tmp_path/'scores.jsonl'
     summary = score_predictions(tmp_path, predictions, output, benchmark=benchmark)
     assert summary['total']['metrics']['choice_accuracy']['mean'] == 1
-    assert summary['protocol'] == 'mmmb-native-scripts-2.1'
+    assert summary['protocol'] == 'mmmb-native-scripts-2.2'
     assert json.loads(output.read_text())['protocol'] == summary['protocol']
     assert {path: path.read_bytes() for path in before} == before
 

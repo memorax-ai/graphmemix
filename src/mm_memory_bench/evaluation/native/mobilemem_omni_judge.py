@@ -145,15 +145,16 @@ def normalize(value):
 
 def summarize(records):
     def metric(rows):
-        judged = [r for r in rows if r.get("status") == "ok" and r.get("label") is not None]
+        judged = [r for r in rows if r.get("status") in {"ok", "method_error"} and r.get("label") is not None]
         return sum(r["label"] == "CORRECT" for r in judged) / len(judged) if judged else 0.0
     grouped = defaultdict(list)
     for row in records:
         grouped[row["native_category"]].append(row)
-    failed = sum(r.get("status") != "ok" for r in records)
+    failed = sum(r.get("status") == "error" for r in records)
     return {"metric": "LLM_JUDGE", "total_predictions": len(records),
             "valid_judgments": sum(r.get("status") == "ok" and r.get("label") is not None for r in records),
             "failed_judgments": failed,
+            "method_failures": sum(r.get("status") == "method_error" for r in records),
             "skipped_judgments": sum(r.get("status") == "ok" and r.get("label") is None for r in records),
             "total_questions": len(records), "overall": {"LLM_JUDGE": metric(records)},
             "by_category": {category: {"count": len(rows), "metrics": {"LLM_JUDGE": metric(rows)}}

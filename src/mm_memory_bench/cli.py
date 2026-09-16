@@ -119,6 +119,10 @@ def _parser() -> argparse.ArgumentParser:
         help="UniversalRAG corpus/router adaptation profile",
     )
     run_parser.add_argument("--top-k", type=int, default=10)
+    run_parser.add_argument(
+        "--reader-max-model-len", type=int, default=32768,
+        help="Reader prompt plus output token limit; must match the deployed service capacity",
+    )
     run_parser.add_argument("--query-concurrency", type=int, default=1)
     run_parser.add_argument("--resume-predictions", action="store_true")
     run_parser.add_argument("--continue-on-query-error", action="store_true")
@@ -204,6 +208,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     judge_parser.add_argument("--concurrency", type=int, default=1)
     judge_parser.add_argument("--no-resume", action="store_true")
+    judge_parser.add_argument("--judge-max-tokens", type=int, default=None,
+                              help="Override dedicated Judge output budget; native protocols only")
     judge_parser.add_argument("--scoring-protocol", choices=["qa", "personamem_v2_open", "m3exam", "mobilemem_omni", "benchmark"], default="qa",
                               help="qa: binary correctness; personamem_v2_open: preference score; benchmark: per-task script/LLM dispatch")
     return parser
@@ -257,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
                 base_url=args.base_url,
                 temperature=0,
                 top_k=args.top_k,
-                max_model_len=32768,
+                max_model_len=args.reader_max_model_len,
                 overflow_policy="error",
             )
             if args.method == "amem":
@@ -614,6 +620,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "judge":
             from .evaluation.judge import backend_from_env, judge_predictions
 
+            if args.judge_max_tokens is not None:
+                if args.judge_max_tokens < 1 or args.scoring_protocol == "qa":
+                    raise ValueError("--judge-max-tokens requires a positive value and a native scoring protocol")
             if args.scoring_protocol == "benchmark":
                 from .evaluation.dispatcher import score_benchmark
 
@@ -621,6 +630,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.bundle, args.predictions, args.output,
                     model=args.model, base_url=args.base_url,
                     api_key_env=args.api_key_env, timeout_seconds=args.timeout_seconds,
+                    judge_max_tokens=args.judge_max_tokens,
                     resume=not args.no_resume, max_items=args.max_items,
                     question_ids_path=args.question_ids, concurrency=args.concurrency,
                 )
@@ -645,6 +655,7 @@ def main(argv: list[str] | None = None) -> int:
                     model=args.model, base_url=args.base_url,
                     api_key_env=args.api_key_env, timeout_seconds=args.timeout_seconds,
                     scoring_protocol=args.scoring_protocol,
+                    max_tokens=args.judge_max_tokens,
                 )
                 result = native_runner.judge_predictions(
                     backend, args.bundle, args.predictions, args.output,

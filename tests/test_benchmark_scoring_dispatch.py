@@ -96,7 +96,7 @@ def test_benchmark_scores_bare_labels_without_changing_inputs(tmp_path, benchmar
     originals = {path: path.read_bytes() for path in
                  [predictions, bundle / "questions.jsonl", bundle / "manifest.json"]}
     result = dispatch.score_benchmark(bundle, predictions, output)
-    assert result["dispatch_protocol"] == "mmmb-benchmark-dispatch-2.1"
+    assert result["dispatch_protocol"] == "mmmb-benchmark-dispatch-2.2"
     assert result["routes"]["script"]["summary"]["total"]["metrics"]["choice_accuracy"]["mean"] == .5
     records = dispatch._load(Path(result["routes"]["script"]["output"]))
     assert records[questions[0]["question_id"]]["metrics"]["choice_accuracy"] == 1

@@ -81,7 +81,7 @@ def data_url(path: str) -> str:
 
 
 class OpenAICompatibleQwenVL:
-    """Minimal vLLM client with a strict server-side 32K token preflight."""
+    """Minimal vLLM client with a configurable strict token preflight."""
 
     def __init__(
         self,

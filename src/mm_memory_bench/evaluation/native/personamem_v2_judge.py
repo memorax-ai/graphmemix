@@ -158,7 +158,8 @@ def summarize(records: list[Mapping[str, Any]]) -> dict[str, Any]:
             ok = [r for r in members if r.get("status") == "ok"]
             score = sum(r["score"] for r in ok)
             result[label] = {"count": len(members), "valid_judgments": len(ok),
-                             "failed_judgments": len(members) - len(ok),
+                             "failed_judgments": sum(r.get("status") == "error" for r in members),
+                             "method_failures": sum(r.get("status") == "method_error" for r in members),
                              "mean_score_conservative": score / len(members),
                              "mean_score_valid_only": score / len(ok) if ok else None}
         return result
@@ -166,7 +167,9 @@ def summarize(records: list[Mapping[str, Any]]) -> dict[str, Any]:
     for subset, entry in by_subset.items():
         entry["by_preference_kind"] = group([r for r in records if r.get("subset") == subset], "preference_kind")
     return {"metric": "preference_alignment", "total_predictions": len(records),
-            "valid_judgments": len(valid), "failed_judgments": len(records) - len(valid),
+            "valid_judgments": len(valid),
+            "failed_judgments": sum(r.get("status") == "error" for r in records),
+            "method_failures": sum(r.get("status") == "method_error" for r in records),
             "mean_score_conservative": total_score / len(records) if records else 0.0,
             "mean_score_valid_only": total_score / len(valid) if valid else None,
             "by_subset": by_subset, "by_preference_kind": group(records, "preference_kind")}

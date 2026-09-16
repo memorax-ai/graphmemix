@@ -7,7 +7,9 @@ import pytest
 from mm_memory_bench.methods.concrete_universalrag import ConcreteUniversalRAGMethod as UR
 from mm_memory_bench.methods.media import image_content, table_text
 from mm_memory_bench.benchmarks.converters.smmbench import _parts
-from mm_memory_bench.evaluation.native.script_judge import score_question
+from mm_memory_bench.evaluation.native.script_judge import score_question, score_predictions
+from mm_memory_bench.evaluation.prediction_status import method_failure
+from mm_memory_bench.evaluation.native_runner import judge_predictions
 
 
 def choice():
@@ -127,3 +129,74 @@ def test_m3_converter_preserves_individual_image_names(tmp_path, monkeypatch):
         for i, part in enumerate(content):
             if part['type']=='image_url':
                 assert content[i-1]['text'].startswith('Image source_id: img_')
+
+
+
+@pytest.mark.parametrize('metadata', [
+    {'method_error':'TimeoutError: timeout'},
+    {'status':'error','error':'context too large'},
+    {'error_type':'invalid_router_output','error':'bad route'},
+])
+def test_method_failure_overrides_residual_correct_script_answer(tmp_path,metadata):
+    q=choice();(tmp_path/'questions.jsonl').write_text(json.dumps(q)+'\n')
+    prediction={'question_id':q['question_id'],'prediction':'0: Corsica','metadata':metadata}
+    assert method_failure(prediction)
+    pred=tmp_path/'pred.jsonl';pred.write_text(json.dumps(prediction)+'\n')
+    out=tmp_path/'score.jsonl'
+    result=score_predictions(tmp_path,pred,out,benchmark='smmbench')
+    row=json.loads(out.read_text())
+    assert row['status']=='method_error' and row['metrics']['choice_accuracy']==0
+    assert row['details']['error']
+    assert result['total']['count']==1
+
+
+
+def test_dedicated_judge_does_not_reuse_false_success_for_method_error(tmp_path):
+    q={'question_id':'m3exam:q','context_id':'c','prompt':[{'type':'text','text':'Q'}],
+       'task':{'subcategory':'ii','response_type':'text'},'answer':{'text':'A'}}
+    (tmp_path/'manifest.json').write_text(json.dumps({'benchmark':'M3Exam'}))
+    (tmp_path/'questions.jsonl').write_text(json.dumps(q)+'\n')
+    pred=tmp_path/'pred.jsonl';pred.write_text(json.dumps({'question_id':q['question_id'],'prediction':'A','metadata':{'method_error':'timeout'}})+'\n')
+    backend=SimpleNamespace(model='fake',judge=Mock(side_effect=AssertionError('must not call judge')))
+    out=tmp_path/'scores.jsonl'
+    for _ in range(2):
+        summary=judge_predictions(backend,tmp_path,pred,out,scoring_protocol='m3exam')
+        row=json.loads(out.read_text())
+        assert row['status']=='method_error' and row['score']==0
+        assert summary['method_failures']==1 and summary['failed_judgments']==0
+        assert summary['valid_judgments']==0
+        # Simulate a cached false success produced by the old runner using the
+        # same input hashes; failure detection must override that cached row.
+        out.write_text(json.dumps({**row, 'status':'ok', 'score':1.0})+'\n')
+    backend.judge.assert_not_called()
+
+
+
+def test_dispatch_counts_method_error_and_keeps_denominator(tmp_path):
+    from mm_memory_bench.evaluation.dispatcher import score_benchmark
+    q=choice()
+    (tmp_path/'manifest.json').write_text(json.dumps({'benchmark':'SMMBench'}))
+    (tmp_path/'questions.jsonl').write_text(json.dumps(q)+'\n')
+    pred=tmp_path/'pred.jsonl'
+    pred.write_text(json.dumps({'question_id':q['question_id'], 'prediction':'0: Corsica',
+                               'metadata':{'method_error':'timeout'}})+'\n')
+    result=score_benchmark(tmp_path,pred,tmp_path/'judgments.jsonl')
+    assert result['routes']['script']['method_failures']==1
+    assert result['routes']['script']['summary']['total']['metrics']['choice_accuracy']=={'count':1,'mean':0}
+
+
+
+def test_dedicated_summaries_separate_failures_without_dropping_zero():
+    from mm_memory_bench.evaluation.native import mobilemem_omni_judge as omni, personamem_v2_judge as persona
+    rows=[{'status':'ok','score':1.,'label':'CORRECT','native_category':'Single-hop'},
+          {'status':'method_error','score':0.,'label':'WRONG','native_category':'Single-hop'},
+          {'status':'error','score':None,'label':None,'native_category':'Single-hop'}]
+    summary=omni.summarize(rows)
+    assert summary['overall']['LLM_JUDGE']==.5
+    assert summary['method_failures']==1 and summary['failed_judgments']==1
+    assert summary['valid_judgments']==1
+    rows=[dict(r,subset='test',preference_kind='normal') for r in rows]
+    summary=persona.summarize(rows)
+    assert summary['mean_score_conservative']==1/3
+    assert summary['by_subset']['test']['method_failures']==1
+    assert summary['by_subset']['test']['failed_judgments']==1

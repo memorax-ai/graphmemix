@@ -15,6 +15,7 @@ from typing import Any, Mapping
 
 from ..benchmarks.bundle import iter_jsonl, read_json, write_json
 from .judge import JudgeBackend
+from .prediction_status import method_failure
 
 
 def get_scorer(name):
@@ -24,6 +25,14 @@ def get_scorer(name):
     if name not in scorers:
         raise ValueError(f"unknown dedicated Judge: {name}")
     return scorers[name]
+
+
+class JudgeResponseError(RuntimeError):
+    """Transport completed without a usable judgment; retain response diagnostics."""
+
+    def __init__(self, message, diagnostics):
+        super().__init__(message)
+        self.diagnostics = diagnostics
 
 
 class OpenAICompatibleJudge:
@@ -37,7 +46,12 @@ class OpenAICompatibleJudge:
         api_key: str | None = None,
         timeout_seconds: float = 120.0,
         scoring_protocol: str,
+        max_tokens: int | None = None,
     ) -> None:
+        if max_tokens is not None and max_tokens < 1:
+            raise ValueError("judge max_tokens must be positive")
+        self.max_tokens = max_tokens
+        self.request_config = {"transport_version": 2, "max_tokens_override": max_tokens}
         self.model = model
         self.scoring_protocol = scoring_protocol
         self.protocol = get_scorer(scoring_protocol)
@@ -47,6 +61,8 @@ class OpenAICompatibleJudge:
 
     def judge(self, item: Mapping[str, Any]) -> Mapping[str, Any]:
         body = self.protocol.request_body(self.model, item)
+        if self.max_tokens is not None:
+            body["max_tokens"] = self.max_tokens
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -62,13 +78,25 @@ class OpenAICompatibleJudge:
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"judge HTTP {exc.code}: {detail[:1000]}") from exc
-        content = payload["choices"][0]["message"]["content"]
+        choice = payload["choices"][0]
+        content = choice["message"].get("content")
+        diagnostics = {"finish_reason": choice.get("finish_reason"),
+                       "usage": payload.get("usage"),
+                       "request_max_tokens": body.get("max_tokens")}
+        if choice.get("finish_reason") not in (None, "stop"):
+            raise JudgeResponseError("judge did not finish normally", diagnostics)
         if isinstance(content, list):
             content = "".join(
                 str(part.get("text", "")) if isinstance(part, Mapping) else str(part)
                 for part in content
             )
-        return self.protocol.parse_response(str(content))
+        if not isinstance(content, str) or not content.strip():
+            raise JudgeResponseError("judge returned empty content", diagnostics)
+        try:
+            result = self.protocol.parse_response(content)
+        except (ValueError, TypeError) as exc:
+            raise JudgeResponseError(str(exc), diagnostics) from exc
+        return {**result, "judge_response_metadata": diagnostics}
 
 
 def judge_predictions(
@@ -162,13 +190,16 @@ def judge_predictions(
         ).hexdigest()
         for row in predictions
     }
+    failures = {str(row["question_id"]): method_failure(row) for row in predictions}
     existing: dict[str, dict[str, Any]] = {}
     if resume and output_path.is_file():
         for row in iter_jsonl(output_path):
             if (
                 row.get("status") == "ok"
                 and str(row["question_id"]) in selected_ids
+                and not failures[str(row["question_id"])]
                 and row.get("judge_model") == backend.model
+                and row.get("judge_request_config") == getattr(backend, "request_config", None)
                 and row.get("judge_protocol") == protocol.PROTOCOL_VERSION
                 and row.get("judge_rubric_sha256") == protocol.RUBRIC_SHA256
                 and row.get("judge_item_sha256") == item_hashes[str(row["question_id"])]
@@ -188,23 +219,22 @@ def judge_predictions(
             "subset": question.get("subset", "default"),
             "prediction": str(prediction.get("prediction", "")),
             "judge_model": backend.model,
+            "judge_request_config": getattr(backend, "request_config", None),
             "judge_protocol": protocol.PROTOCOL_VERSION,
             "judge_rubric_sha256": protocol.RUBRIC_SHA256,
             "prediction_row_sha256": prediction_hashes[question_id],
             "judge_item_sha256": item_hashes[question_id],
             **protocol.record_fields(items[question_id]),
         }
-        metadata = prediction.get("metadata")
-        prediction_failed = (
-            isinstance(metadata, Mapping)
-            and (
-                metadata.get("status") == "error"
-                or bool(metadata.get("error_type"))
-            )
-        )
+        failure = failures[question_id]
+        if failure:
+            record.update({"status": "method_error", **protocol.zero(), **failure, "score": 0.0})
+            if "label" in record:
+                record.update(label="WRONG", correct=False)
+            return record
         empty_is_zero = getattr(protocol, "empty_prediction_is_zero", True)
         skip_item = getattr(protocol, "skip_item", lambda item: False)
-        if prediction_failed or (empty_is_zero and not record["prediction"].strip()) or skip_item(items[question_id]):
+        if (empty_is_zero and not record["prediction"].strip()) or skip_item(items[question_id]):
             record.update({"status": "ok", **protocol.zero()})
             return record
         try:
@@ -214,6 +244,8 @@ def judge_predictions(
                 {
                     "status": "ok",
                     **normalized,
+                    **({"judge_response_metadata": raw["judge_response_metadata"]}
+                       if "judge_response_metadata" in raw else {}),
                 }
             )
         except Exception as exc:  # preserve failures for resumable, auditable runs
@@ -222,6 +254,8 @@ def judge_predictions(
                     "status": "error",
                     **protocol.zero(),
                     "error": f"{type(exc).__name__}: {exc}",
+                    **({"judge_response_metadata": exc.diagnostics}
+                       if isinstance(exc, JudgeResponseError) else {}),
                 }
             )
         return record
@@ -268,6 +302,7 @@ def backend_from_env(
     api_key_env: str,
     timeout_seconds: float,
     scoring_protocol: str,
+    max_tokens: int | None = None,
 ) -> OpenAICompatibleJudge:
     return OpenAICompatibleJudge(
         model=model,
@@ -275,4 +310,5 @@ def backend_from_env(
         api_key=os.environ.get(api_key_env),
         timeout_seconds=timeout_seconds,
         scoring_protocol=scoring_protocol,
+        max_tokens=max_tokens,
     )

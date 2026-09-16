@@ -138,7 +138,7 @@ evaluation/
 
 **公开仓库缺少其导入的 eval/llm_judge.py，不能验证完整官方请求与解析流程。** 本地明确采用：user 文本 prompt、temperature=0、证据列表 JSON 序列化；提取唯一包含 label 的 JSON 对象，只接受 CORRECT/WRONG，解析失败记录为可重跑的评分错误。上述请求拼装与解析属于本仓库选择，而非已核实的官方实现。
 
-协议特意命名为 `mmmb-omni-published-prompt-1.0`，逐题记录 `implementation_scope=published_prompt_local_parser`。结果含 label、correct、score 和 judge_response；无参考或方法失败的标签为 null，不进入官方标签准确率分母。仍可显式使用 `qa` 得到原通用 Judge 分数。
+协议特意命名为 `mmmb-omni-published-prompt-1.0`，逐题记录 `implementation_scope=published_prompt_local_parser`。结果含 label、correct、score 和 judge_response；无参考且正常跳过的标签为 null，不进入标签准确率分母；方法失败记录为 method_error、WRONG 和 0 分，并保留在分母中。仍可显式使用 `qa` 得到原通用 Judge 分数。
 
 ### 验证范围
 
@@ -150,9 +150,40 @@ PersonaMem-v2 使用官方 `extract_judge_decision` 的数值规则，包括无�
 
 `tmp/official-judge-validation/verify_persona_and_qa.py` 对照官方两个 PersonaMem-v2 prompt、3,005 个解析案例与三种偏好输入的实际提示词调用；另直接加载当前 HEAD 中的原 judge.py，对正确、错误、空回答、API 失败、方法失败五种记录核对原字段和汇总值。差分无不一致。Omni JSON 解析使用本仓库实现，其官方提示词、参考选择、证据映射及可见汇总规则分别验证，不将缺失源码的解析部分冒充官方对照通过。
 
-### SMMBench choice inputs
+## Dedicated Judge output budget
+
+Use `mmmb judge ... --scoring-protocol benchmark --judge-max-tokens 512`
+to override the dedicated LLM Judge output budget (also supported for individual
+native LLM protocols). Without the option, each official protocol retains its
+default. The QA Judge is unchanged. Reasoning models may require a larger budget
+than the M³Exam official 16-token setting; 512 is an experiment setting, not a
+guarantee for every question.
+
+Empty responses and abnormal termination (including `finish_reason=length`) are
+recorded as `status=error`, counted in `failed_judgments`, and retried on resume.
+They are not successful zero judgments. Records preserve `judge_response_metadata`
+with finish reason, usage and requested budget. Existing native metric aggregation
+is unchanged; check failure counts before interpreting aggregate scores.
+The request configuration is stored with each judgment, so old transport results
+or results from a different budget are not silently reused.
+
+
+### 端到端适配修复（脚本协议 2.2）
 
 - 新转换的 SMMBench MCQ 使用官方 `(A)`–`(D)` 选项标签，并保留原始答案索引。旧 bundle 的纯数字以及完整的 `数字: 对应公开选项文字` 输出会转换为字母标签后调用原生评分；不解析任意解释文本，不根据标准答案进行转换。工具计划规则不变。
+- 脚本评分、专用 Judge 与分发汇总统一识别 runner 的 `metadata.method_error`、`status=error`、`error_type`。方法异常保留原因、记零并留在分母；与 Judge 请求失败分开计数。原 `evaluation/judge.py` 未修改。
+- SMMBench JSON 表格保留原文本并增加公共表格格式标记；UniversalRAG 同时识别旧 bundle 的原生 header/rows JSON 结构。
+- M³Exam 每个附件 content part 保留原始 `source_id`；公共图片输入函数将其与图片一起呈现。UniversalRAG 保留同一记忆中的不同图片；同一资产的重复检索仍去重，top-k 保持为证据单元数。
+- 无证据时不再声称路由器选择了“不检索”。
+
+媒体与表格单元格式已更新为 UniversalRAG checkpoint v3。旧 checkpoint 会被明确拒绝；请重新转换相关 bundle 并使用新的 checkpoint 目录建库，不能将旧索引视为包含新的表格与图片标识。已有预测仍可直接用于重新评分，无需为修复评分而重跑方法。
+
+
+### 跨方法媒体输入回归
+
+原始资产标识由 converter 提供；公共媒体函数负责与图片或生成 caption 绑定。A-Mem、MemGuide、LightMem 接入生成 caption 标识，A-Mem 的笔记身份数据额外保留图片编号列表；VimRAG 在官方工具结果格式化后追加编号，不替换其 Picture 标识或搜索工具；Oracle 复用公共图片渲染。
+
+以上覆盖本次原始媒体与生成 caption 路径，不等同于真实模型长期记忆提炼后的正确率保证。新增跨方法测试覆盖表格文本保留、每图标识、无标识媒体兼容和 VimRAG 官方格式化函数。A-Mem 笔记版本、MemGuide/LightMem/VimRAG checkpoint 版本随输入变化更新；后续模型验证需使用新索引目录。
 
 ### SMMBench planning instructions
 
@@ -179,19 +210,3 @@ the official baseline's model, retriever, or evidence organization.
 Existing bundles need reconversion to receive the new instructions. A controlled
 prompt comparison may reuse the same memory index and frozen retrieved evidence,
 but must generate fresh predictions and retain the old artifacts separately.
-
-
-### 媒体与表格输入
-
-- SMMBench JSON 表格保留原文本并增加公共表格格式标记；UniversalRAG 同时识别旧 bundle 的原生 header/rows JSON 结构。
-- M³Exam 每个附件 content part 保留原始 `source_id`；公共图片输入函数将其与图片一起呈现。UniversalRAG 保留同一记忆中的不同图片；同一资产的重复检索仍去重，top-k 保持为证据单元数。
-
-- 无证据时不再声称路由器选择了“不检索”。
-
-媒体与表格单元格式已更新为 UniversalRAG checkpoint v3。旧 checkpoint 会被明确拒绝；请重新转换相关 bundle 并使用新的 checkpoint 目录建库，不能将旧索引视为包含新的表格与图片标识。已有预测仍可直接用于重新评分，无需为修复评分而重跑方法。
-
-### 跨方法媒体输入回归
-
-原始资产标识由 converter 提供；公共媒体函数负责与图片或生成 caption 绑定。A-Mem、MemGuide、LightMem 接入生成 caption 标识，A-Mem 的笔记身份数据额外保留图片编号列表；VimRAG 在官方工具结果格式化后追加编号，不替换其 Picture 标识或搜索工具；Oracle 复用公共图片渲染。
-
-以上覆盖本次原始媒体与生成 caption 路径，不等同于真实模型长期记忆提炼后的正确率保证。新增跨方法测试覆盖表格文本保留、每图标识、无标识媒体兼容和 VimRAG 官方格式化函数。A-Mem 笔记版本、MemGuide/LightMem/VimRAG checkpoint 版本随输入变化更新；后续模型验证需使用新索引目录。
