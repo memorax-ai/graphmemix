@@ -88,6 +88,42 @@ The frozen result manifest is
 | `memeye` | MemEye | 1,855 |
 | `h2hmem` | H2HMem evidence-supported track | 1,982 |
 
+## 📱 Mobile-Mem Leaderboard
+
+We evaluate on two tracks, MobileMem-Omni and MobileMem-Struct, using Qwen3-VL-8B-Instruct as the backbone and Qwen3-14B as the judge.
+
+### MobileMem-Omni
+
+16 users · 7,415 open-ended questions · scores in % · sorted by overall LLM-Judge (ascending).
+
+| Method | Single-Hop | Multi-Hop | Knowledge Update | Temporal Reasoning | Abstention | Implicit Preference | Visual Reasoning | LLM-Judge | F1 |
+| :-- | --: | --: | --: | --: | --: | --: | --: | --: | --: |
+| NaiveRAG | 5.07 | 5.64 | 2.77 | 5.30 | 7.45 | 0.73 | 2.41 | 4.15 | 4.38 |
+| M²A | 0.82 | 1.06 | 2.33 | 8.98 | 16.42 | 4.91 | 2.75 | 5.40 | 10.54 |
+| Long Context | 4.06 | 4.32 | 5.05 | 9.19 | 6.29 | 6.53 | 6.78 | 5.93 | 12.81 |
+| SigLIP + NaiveRAG | 10.90 | 9.90 | 9.80 | 11.90 | 15.56 | 17.50 | 4.40 | 11.60 | 4.60 |
+| Multimodal Long Context | 16.70 | 11.60 | 18.30 | 19.00 | 1.40 | 9.30 | 13.50 | 12.80 | 12.20 |
+| UniversalRAG | 14.80 | 12.30 | 15.90 | 11.50 | 13.10 | 26.60 | 3.20 | 14.20 | 4.60 |
+| LangMem | 17.44 | 14.19 | 18.71 | 17.08 | 13.82 | 30.18 | 8.17 | 17.25 | 2.43 |
+| M²A (w/ Caption) | 25.96 | 26.70 | 21.88 | 17.85 | 5.46 | 20.80 | 17.21 | 19.21 | 17.53 |
+| EverMemOS | 28.09 | 27.22 | 27.82 | 26.26 | 13.82 | 31.97 | 19.22 | 24.76 | 3.55 |
+| Mem0 | 25.89 | 23.23 | 31.81 | 23.70 | 13.01 | 50.49 | 16.79 | 26.71 | 8.77 |
+| LightMem | 30.12 | 26.43 | 29.70 | 23.16 | 20.78 | 36.05 | 22.19 | 27.08 | 16.88 |
+| **GraphMemix** | **50.91** | **50.22** | **38.42** | **25.23** | **18.21** | **26.18** | **35.65** | **34.79** | **40.32** |
+
+Baselines: [official Omni results](https://github.com/zjunlp/MobileMem/blob/fa5cd13c9c659699df9caf650987ba2bea8ca085/omni/asset/results.png).
+
+### MobileMem-Struct
+
+| Method | Score (%) |
+| :-- | --: |
+| MemOS | 24.17 |
+| EverOS | 26.67 |
+| LightMem | 28.61 |
+| **GraphMemix** | **54.72** |
+
+Results are reproduced using existing open-source repositories.
+
 ## 🛠️ Installation
 
 ```bash

@@ -1,0 +1,315 @@
+{
+  "protocol": "mobile-mem-leaderboard-v1",
+  "benchmark": "MobileMem-Omni",
+  "model": "Qwen/Qwen3-VL-8B-Instruct",
+  "source": {
+    "repository": "https://github.com/zjunlp/MobileMem",
+    "commit": "fa5cd13c9c659699df9caf650987ba2bea8ca085",
+    "url": "https://github.com/zjunlp/MobileMem/blob/fa5cd13c9c659699df9caf650987ba2bea8ca085/omni/asset/results.png",
+    "retrieved_at": "2026-10-23",
+    "extraction": "Manually transcribed from the official leaderboard image; original source order and reported scores preserved."
+  },
+  "notes": [
+    "Imported upstream results, not locally reproduced.",
+    "Scores retain the upstream 0–100 scale; Overall LLM-Judge and F1 are distinct metrics.",
+    "These results use the MobileMem evaluation protocol and must not be merged with the GraphMemix four-benchmark average.",
+    "Internal historical Feishu results are in internal_entries; the current cloned GraphMemix release has not been evaluated on MobileMem in this task."
+  ],
+  "entries": [
+    {
+      "method": "Long Context",
+      "memory_type": "textual",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "status": "upstream_reported",
+      "scores": {
+        "single_hop": 4.06,
+        "multi_hop": 4.32,
+        "knowledge_update": 5.05,
+        "temporal_reasoning": 9.19,
+        "abstention": 6.29,
+        "implicit_preference": 6.53,
+        "visual_reasoning": 6.78,
+        "overall_llm_judge": 5.93,
+        "overall_f1": 12.81
+      }
+    },
+    {
+      "method": "NaiveRAG",
+      "memory_type": "textual",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "status": "upstream_reported",
+      "scores": {
+        "single_hop": 5.07,
+        "multi_hop": 5.64,
+        "knowledge_update": 2.77,
+        "temporal_reasoning": 5.3,
+        "abstention": 7.45,
+        "implicit_preference": 0.73,
+        "visual_reasoning": 2.41,
+        "overall_llm_judge": 4.15,
+        "overall_f1": 4.38
+      }
+    },
+    {
+      "method": "LangMem",
+      "memory_type": "textual",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "status": "upstream_reported",
+      "scores": {
+        "single_hop": 17.44,
+        "multi_hop": 14.19,
+        "knowledge_update": 18.71,
+        "temporal_reasoning": 17.08,
+        "abstention": 13.82,
+        "implicit_preference": 30.18,
+        "visual_reasoning": 8.17,
+        "overall_llm_judge": 17.25,
+        "overall_f1": 2.43
+      }
+    },
+    {
+      "method": "Mem0",
+      "memory_type": "textual",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "status": "upstream_reported",
+      "scores": {
+        "single_hop": 25.89,
+        "multi_hop": 23.23,
+        "knowledge_update": 31.81,
+        "temporal_reasoning": 23.7,
+        "abstention": 13.01,
+        "implicit_preference": 50.49,
+        "visual_reasoning": 16.79,
+        "overall_llm_judge": 26.71,
+        "overall_f1": 8.77
+      }
+    },
+    {
+      "method": "LightMem",
+      "memory_type": "textual",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "status": "upstream_reported",
+      "scores": {
+        "single_hop": 30.12,
+        "multi_hop": 26.43,
+        "knowledge_update": 29.7,
+        "temporal_reasoning": 23.16,
+        "abstention": 20.78,
+        "implicit_preference": 36.05,
+        "visual_reasoning": 22.19,
+        "overall_llm_judge": 27.08,
+        "overall_f1": 16.88
+      }
+    },
+    {
+      "method": "EverMemOS",
+      "memory_type": "textual",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "status": "upstream_reported",
+      "scores": {
+        "single_hop": 28.09,
+        "multi_hop": 27.22,
+        "knowledge_update": 27.82,
+        "temporal_reasoning": 26.26,
+        "abstention": 13.82,
+        "implicit_preference": 31.97,
+        "visual_reasoning": 19.22,
+        "overall_llm_judge": 24.76,
+        "overall_f1": 3.55
+      }
+    },
+    {
+      "method": "M²A (w/ Caption)",
+      "memory_type": "textual",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "status": "upstream_reported",
+      "scores": {
+        "single_hop": 25.96,
+        "multi_hop": 26.7,
+        "knowledge_update": 21.88,
+        "temporal_reasoning": 17.85,
+        "abstention": 5.46,
+        "implicit_preference": 20.8,
+        "visual_reasoning": 17.21,
+        "overall_llm_judge": 19.21,
+        "overall_f1": 17.53
+      }
+    },
+    {
+      "method": "Multimodal Long Context",
+      "memory_type": "multimodal",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "status": "upstream_reported",
+      "scores": {
+        "single_hop": 16.7,
+        "multi_hop": 11.6,
+        "knowledge_update": 18.3,
+        "temporal_reasoning": 19.0,
+        "abstention": 1.4,
+        "implicit_preference": 9.3,
+        "visual_reasoning": 13.5,
+        "overall_llm_judge": 12.8,
+        "overall_f1": 12.2
+      }
+    },
+    {
+      "method": "SigLIP + NaiveRAG",
+      "memory_type": "multimodal",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "status": "upstream_reported",
+      "scores": {
+        "single_hop": 10.9,
+        "multi_hop": 9.9,
+        "knowledge_update": 9.8,
+        "temporal_reasoning": 11.9,
+        "abstention": 15.56,
+        "implicit_preference": 17.5,
+        "visual_reasoning": 4.4,
+        "overall_llm_judge": 11.6,
+        "overall_f1": 4.6
+      }
+    },
+    {
+      "method": "UniversalRAG",
+      "memory_type": "multimodal",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "status": "upstream_reported",
+      "scores": {
+        "single_hop": 14.8,
+        "multi_hop": 12.3,
+        "knowledge_update": 15.9,
+        "temporal_reasoning": 11.5,
+        "abstention": 13.1,
+        "implicit_preference": 26.6,
+        "visual_reasoning": 3.2,
+        "overall_llm_judge": 14.2,
+        "overall_f1": 4.6
+      }
+    },
+    {
+      "method": "M²A",
+      "memory_type": "multimodal",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "status": "upstream_reported",
+      "scores": {
+        "single_hop": 0.82,
+        "multi_hop": 1.06,
+        "knowledge_update": 2.33,
+        "temporal_reasoning": 8.98,
+        "abstention": 16.42,
+        "implicit_preference": 4.91,
+        "visual_reasoning": 2.75,
+        "overall_llm_judge": 5.4,
+        "overall_f1": 10.54
+      }
+    }
+  ],
+  "internal_sources": [
+    {
+      "id": "feishu_comparison_revision_58",
+      "url": "https://my.feishu.cn/docx/EKsudI7VloIBlcx8S5wcnDjdnIe",
+      "document_id": "EKsudI7VloIBlcx8S5wcnDjdnIe",
+      "revision_id": 58,
+      "retrieved_at": "2026-10-23",
+      "verification": "Read from the live Feishu document; scores transcribed from exact source rows. Historical raw run files are unavailable, so these are report-level imports, not independently reproduced results."
+    }
+  ],
+  "internal_entries": [
+    {
+      "method": "GraphMemix",
+      "source_label": "Qwen3-VL-8B｜Session-caption + 旧 Memix｜优化 Prompt A",
+      "model": "Qwen/Qwen3-VL-8B-Instruct",
+      "memory_representation": "session-caption",
+      "answer_prompt": "optimized Prompt A",
+      "status": "feishu_reported_historical",
+      "judge": "Qwen3-14B",
+      "evaluation_scope": {
+        "users": 16,
+        "questions": 7415,
+        "question_type": "open-ended",
+        "user_ids": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17
+        ]
+      },
+      "source_id": "feishu_comparison_revision_58",
+      "scores": {
+        "single_hop": 50.91,
+        "multi_hop": 50.22,
+        "knowledge_update": 38.42,
+        "temporal_reasoning": 25.23,
+        "abstention": 18.21,
+        "implicit_preference": 26.18,
+        "visual_reasoning": 35.65,
+        "overall_llm_judge": 34.79,
+        "overall_f1": 40.32
+      },
+      "configuration": "Session-caption + legacy Memix + optimized Prompt A"
+    }
+  ],
+  "struct": {
+    "benchmark": "MobileMem-Struct",
+    "model": null,
+    "status": "user_reported",
+    "source": {
+      "type": "user_provided_scores",
+      "received_at": "2026-10-23",
+      "note": "User requested displaying Memorax as GraphMemix. Backbone and metric definition were not supplied."
+    },
+    "metrics": [
+      "score_percent"
+    ],
+    "entries": [
+      {
+        "method": "MemOS",
+        "source_label": "MemOS",
+        "model": null,
+        "status": "user_reported",
+        "scores": {
+          "score_percent": 24.17
+        }
+      },
+      {
+        "method": "EverOS",
+        "source_label": "EverOS",
+        "model": null,
+        "status": "user_reported",
+        "scores": {
+          "score_percent": 26.67
+        }
+      },
+      {
+        "method": "LightMem",
+        "source_label": "LightMem",
+        "model": null,
+        "status": "user_reported",
+        "scores": {
+          "score_percent": 28.61
+        }
+      },
+      {
+        "method": "GraphMemix",
+        "source_label": "Memorax",
+        "model": null,
+        "status": "user_reported",
+        "scores": {
+          "score_percent": 54.72
+        }
+      }
+    ]
+  }
+}
