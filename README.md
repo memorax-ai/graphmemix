@@ -65,7 +65,7 @@ the same model for node verification, ECV, and final answering.
 | MemGuide | 48.47 | 48.10 | 41.40 | 39.94 | 44.48 |
 | LightMem | 22.70 | 38.28 | 36.23 | 31.04 | 32.06 |
 | VimRAG | 33.81 | 48.33 | 28.25 | 17.89 | 32.07 |
-| **GraphMemix** | **55.27** | **76.33** | **53.64** | **60.96** | **61.55** |
+| **Memorax (Graphmemix)** | **55.27** | **76.33** | **53.64** | **60.96** | **61.55** |
 
 ### Gemma 4 12B Unified
 
@@ -76,7 +76,7 @@ the same model for node verification, ECV, and final answering.
 | MemGuide | 54.98 | 48.33 | 30.40 | 47.98 | 45.43 |
 | LightMem | 24.33 | 33.72 | 20.70 | 32.80 | 27.89 |
 | VimRAG | 22.51 | 46.99 | 31.81 | 39.00 | 35.08 |
-| **GraphMemix** | **58.05** | **81.47** | **66.68** | **63.47** | **67.42** |
+| **Memorax (Graphmemix)** | **58.05** | **81.47** | **66.68** | **63.47** | **67.42** |
 
 The frozen result manifest is
 [`release/benchmark_results.json`](release/benchmark_results.json).
@@ -109,7 +109,7 @@ We evaluate on two tracks, MobileMem-Omni and MobileMem-Struct, using Qwen3-VL-8
 | EverMemOS | 28.09 | 27.22 | 27.82 | 26.26 | 13.82 | 31.97 | 19.22 | 24.76 | 3.55 |
 | Mem0 | 25.89 | 23.23 | 31.81 | 23.70 | 13.01 | 50.49 | 16.79 | 26.71 | 8.77 |
 | LightMem | 30.12 | 26.43 | 29.70 | 23.16 | 20.78 | 36.05 | 22.19 | 27.08 | 16.88 |
-| **GraphMemix** | **50.91** | **50.22** | **38.42** | **25.23** | **18.21** | **26.18** | **35.65** | **34.79** | **40.32** |
+| **Memorax (Graphmemix)** | **50.91** | **50.22** | **38.42** | **25.23** | **18.21** | **26.18** | **35.65** | **34.79** | **40.32** |
 
 Baselines: [official Omni results](https://github.com/zjunlp/MobileMem/blob/fa5cd13c9c659699df9caf650987ba2bea8ca085/omni/asset/results.png).
 
@@ -120,7 +120,7 @@ Baselines: [official Omni results](https://github.com/zjunlp/MobileMem/blob/fa5c
 | MemOS | 24.17 |
 | EverOS | 26.67 |
 | LightMem | 28.61 |
-| **GraphMemix** | **54.72** |
+| **Memorax (Graphmemix)** | **54.72** |
 
 Results are reproduced using existing open-source repositories.
 

@@ -216,7 +216,7 @@
   ],
   "internal_entries": [
     {
-      "method": "GraphMemix",
+      "method": "Memorax (Graphmemix)",
       "source_label": "Qwen3-VL-8B｜Session-caption + 旧 Memix｜优化 Prompt A",
       "model": "Qwen/Qwen3-VL-8B-Instruct",
       "memory_representation": "session-caption",
@@ -302,7 +302,7 @@
         }
       },
       {
-        "method": "GraphMemix",
+        "method": "Memorax (Graphmemix)",
         "source_label": "Memorax",
         "model": null,
         "status": "user_reported",
