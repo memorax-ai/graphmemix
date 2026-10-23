@@ -310,6 +310,13 @@
           "score_percent": 54.72
         }
       }
-    ]
+    ],
+    "evaluation_scope": {
+      "personas_evaluated": 9,
+      "personas_total": 10,
+      "excluded_personas": 1,
+      "exclusion_reason": "The excluded persona includes dependencies between earlier and later questions and agent-capability tests such as tool calling, outside the scope of our method.",
+      "source": "user-provided evaluation scope"
+    }
   }
 }

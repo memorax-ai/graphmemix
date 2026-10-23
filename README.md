@@ -122,7 +122,7 @@ Baselines: [official Omni results](https://github.com/zjunlp/MobileMem/blob/fa5c
 | LightMem | 28.61 |
 | **Memorax (Graphmemix)** | **54.72** |
 
-Results are reproduced using existing open-source repositories.
+Results are reproduced using existing open-source repositories. Results cover 9 of the 10 personas. We exclude one persona because its evaluation includes dependencies between earlier and later questions, as well as agent-capability tests such as tool calling, which are outside the scope of our method.
 
 ## 🛠️ Installation
 
